@@ -1,7 +1,7 @@
 #################################################################################
 # Nombre del programa:	2_explore_pop.R,
 # Autor:              	Madeline Swarr
-# Ultima modificacion: 	29 marzo 2022
+# Ultima modificacion: 	28 abril 2022
 #
 # Descripcion: 
 #	Utiliza los datos de las variables elegidas por el programa 1_process_raw 
@@ -21,50 +21,46 @@
 #################################################################################
 
 ########### ESPECIFICAMOS EL DIRECTORIO DEL CODIGO ################
-head.dir <- head_dir
+head.dir <- "/Volumes/GoogleDrive/My Drive/Thesis/Data Analysis/ENI_ANALYSIS"
+run_date <- "26abril2022"
 
 # Descargar libraries 
 dependency.dir <- paste0(head.dir, "/Pipeline/dependencies")
 source(paste0(dependency.dir, "/get_packages.R"))
-get_packages(c("plyr", "tidyverse", "hash", "reshape2", "stringr", "ggplot2"))
+get_packages(c("plyr", "tidyverse", "hash", "reshape2", "stringr", "ggplot2", "RColorBrewer"))
 
 ####################    Asignacion de parametros    #######################
 # Recogemos la ruta del script que se esta ejecutando
-input.dir <- paste0(head.dir, "/Output/1_processed")
-output.dir <- paste0(head.dir, "/Output/2_explored")
+input.dir <- paste0(head.dir, "/Output/", run_date, "/1_processed")
+output.dir <- paste0(head.dir, "/Output/", run_date, "/2_explored")
+missing.dir <- paste0(head.dir, "/Data/missing_countries_padron.xls")
 if (!dir.exists(output.dir)) {
-  dir.create(output.dir)
+  dir.create(output.dir, recursive = T)
 }
 
-this_data <- readRDS(paste0(input.dir, "/datos_eni_07_subset.rds"))
+this_data <- readRDS(paste0(input.dir, "/datos_eni_07_processed.rds"))
 
-##################### Characterize independent variables ########################
-#### Sibling data
-m <- data.frame(convive = c(min(this_data$HH_convive, na.rm = T), quantile(this_data$HH_convive, c(.25, .5, .75), na.rm = T), max(this_data$HH_convive, na.rm = T)))
 
-#### Civic engagement and participation
-participation_data <- this_data[, grep(c("PNX|PX|PELEC"), colnames(this_data))] %>% select(-PXNC) %>% filter(complete.cases(.))
-no <- colSums(participation_data==0, na.rm = T)
-yes <- colSums(participation_data==1, na.rm = T)
-total <- nrow(participation_data)
+##################### POPULATION RESTRICTION ATTRITION #################
+restriction_data <- this_data %>% dplyr::select(economic, ALLE) %>% 
+  mutate(arrival_1998 = ifelse(ALLE >= 1998, 1, 0),
+         arrival_2000 = ifelse(ALLE >= 2000, 1, 0),
+         arrival_2001 = ifelse(ALLE >= 2001, 1, 0),
+         arrival_2002 = ifelse(ALLE >= 2002, 1, 0),
+         arrival_2003 = ifelse(ALLE >= 2003, 1, 0),
+         arrival_2004 = ifelse(ALLE >= 2004, 1, 0),
+         economic_1998 = ifelse(economic == 1 & arrival_1998 == 1, 1, 0),
+         economic_2003 = ifelse(economic == 1 & arrival_2003 == 1, 1, 0)) %>% dplyr::select(-ALLE)
+
+no <- colSums(restriction_data==0, na.rm = T)
+yes <- colSums(restriction_data ==1, na.rm = T)
+total <- no + yes
 percent <- (yes/total)*100
 
-civic_engagement_stats <- data.frame(yes,
-                                     no,
-                                     total,
-                                     percent)
-
-participation_data_all <- this_data$participation_indicator[!is.na(this_data$participation_index)]
-no <- sum(participation_data_all==0)
-yes <- sum(participation_data_all==1)
-total <- length(participation_data_all)
-percent <- (yes/total)*100
-
-civic_engagement_stats_all <- data.frame(yes,
-                                         no,
-                                         total,
-                                         percent)
-
+restriction_stats <- data.frame(yes,
+                                no,
+                                total,
+                                percent)
 
 ###### Social network support
 support_data <- this_data %>% select(LLCONT, DINFAM, CONFAM, networked, housing_connect)
@@ -90,34 +86,56 @@ support_stats_all <- data.frame(yes,
                                 total,
                                 percent)
 
-##################### Explore population restriction attrition #################
-restriction_data <- this_data %>% select(economic, ethnic, ALLE01) %>% 
-  mutate(arrival_1998 = ifelse(ALLE01 >= 1998, 1, 0),
-         arrival_2000 = ifelse(ALLE01 >= 2000, 1, 0),
-         arrival_2001 = ifelse(ALLE01 >= 2001, 1, 0),
-         arrival_2002 = ifelse(ALLE01 >= 2002, 1, 0),
-         arrival_2003 = ifelse(ALLE01 >= 2003, 1, 0),
-         arrival_2004 = ifelse(ALLE01 >= 2004, 1, 0),
-         economic_1998 = ifelse(economic == 1 & arrival_1998 == 1, 1, 0),
-         economic_2003 = ifelse(economic == 1 & arrival_2003 == 1, 1, 0)) %>% select(-ALLE01)
 
-no <- colSums(restriction_data==0, na.rm = T)
-yes <- colSums(restriction_data ==1, na.rm = T)
-total <- no + yes
+##################### Characterize independent variables ########################
+#### Sibling data
+HH_convive_stats <- data.frame(convive = c(min(this_data$HH_convive, na.rm = T), quantile(this_data$HH_convive, c(.25, .5, .75), na.rm = T), max(this_data$HH_convive, na.rm = T)))
+HH_otro_municipio_stats <- data.frame(otro_municipio = c(min(this_data$HH_otro_municipio, na.rm = T), quantile(this_data$HH_otro_municipio, c(.25, .5, .75), na.rm = T), max(this_data$HH_otro_municipio, na.rm = T)))
+HH_en_espana_stats <- data.frame(en_espana = c(min(this_data$HH_en_espana, na.rm = T), quantile(this_data$HH_en_espana, c(.25, .5, .75), na.rm = T), max(this_data$HH_en_espana, na.rm = T)))
+
+#### Civic engagement and participation
+participation_data <- this_data[, grep(c("PNX|PX|PELEC"), colnames(this_data))] %>% select(-PXNC) %>% filter(complete.cases(.))
+no <- colSums(participation_data==0, na.rm = T)
+yes <- colSums(participation_data==1, na.rm = T)
+total <- nrow(participation_data)
 percent <- (yes/total)*100
 
-restriction_stats <- data.frame(yes,
-                                no,
-                                total,
-                                percent)
+civic_engagement_stats <- data.frame(yes,
+                                     no,
+                                     total,
+                                     percent)
+
+participation_data_all <- this_data$participation_indicator[!is.na(this_data$participation_index)]
+no <- sum(participation_data_all==0)
+yes <- sum(participation_data_all==1)
+total <- length(participation_data_all)
+percent <- (yes/total)*100
+
+civic_engagement_stats_all <- data.frame(yes,
+                                         no,
+                                         total,
+                                         percent)
+
+
+#################### Characterize padrón/ethnic concentration data ###############
+missing_countries <- readWorksheetFromFile(missing.dir, sheet = 1)
+these_missing_data <- this_data %>% filter(country %in% missing_countries$Country)
+view(table(these_missing_data$country))
+
+hist(this_data$eth_dens_prov_2006, breaks = 300)
+hist(log(this_data$eth_dens_prov_2006), breaks = 50)
 
 ##################### Characterize the entire population ########################
 ## Which countries are most represented?
 countries <- table(this_data$country) %>% as.data.frame(responseName = "Freq") %>% dplyr::rename(country = Var1) %>%
   arrange(desc(Freq))
-these_top_countries <- countries %>% filter(Freq > 250)
-this_pop <- this_data %>% filter(country %in% these_top_countries$country & !is.na(sector2) & ethnic == 1)
+these_top_countries <- countries %>% filter(Freq > 400)
+this_pop <- this_data %>% mutate(country_class = ifelse(country %in% these_top_countries$country, country, "Other"))
 order_countries <- these_top_countries$country[these_top_countries$country %in% levels(factor(this_pop$country))] %>% as.vector()
+
+ggplot(this_pop, aes(x=eth_dens_prov_2006, fill=country_class)) +
+  geom_histogram(bins = 20) + 
+  scale_fill_brewer(palette="Set3")
 
 ## Which sectors are most represented by country? Take the top 4 sectors represented for each country
 sectors <- ddply(this_pop, c("sector2", "country"), summarise, grp.count=n()) %>% group_by(country) %>%

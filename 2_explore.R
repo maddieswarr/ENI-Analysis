@@ -21,6 +21,7 @@
 
 ########### ESPECIFICAMOS EL DIRECTORIO DEL CODIGO ################
 head.dir <- head_dir
+run_date <- "12abril2022"
 
 # Descargar libraries 
 dependency.dir <- paste0(head.dir, "/Pipeline/dependencies")
@@ -29,13 +30,13 @@ get_packages(c("plyr", "tidyverse", "hash", "reshape2", "stringr", "ggplot2"))
 
 ####################    Asignacion de parametros    #######################
 # Recogemos la ruta del script que se esta ejecutando
-input.dir <- paste0(head.dir, "/Output/1_processed")
-output.dir <- paste0(head.dir, "/Output/2_explored")
+input.dir <- paste0(head.dir, "/Output/", run_date, "/1_processed")
+output.dir <- paste0(head.dir, "/Output/", run_date, "/2_explored")
 if (!dir.exists(output.dir)) {
-  dir.create(output.dir)
+  dir.create(output.dir, recursive = T)
 }
 
-this_data <- readRDS(paste0(input.dir, "/datos_eni_07_subset.rds"))
+this_data <- readRDS(paste0(input.dir, "/datos_eni_07_processed.rds"))
 
 ####################    Exploramos    #######################
 # De que paises vienen los inmigrantes
