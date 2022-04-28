@@ -14,6 +14,7 @@ get_packages <- function(packages){
     if(!this_package %in% installed.packages()){
       install.packages(this_package)
     }
+    if(this_package == "XLConnect") {options(java.parameters = "-Xmx1024m")}
     library(this_package, character.only = TRUE)
   }
   
