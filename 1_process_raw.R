@@ -1,7 +1,7 @@
 #################################################################################
 # Nombre del programa:	1_process_raw.R,                  
 # Autor:              	Madeline Swarr 
-# Ultima modificacion: 	11 mayo 2022
+# Ultima modificacion: 	27 mayo 2022
 #       
 # Descripcion: 
 #	Este programa procesa un fichero de microdatos del INE (md_EPA_2021T1.txt...renombrado a datos_eni_07.txt)
