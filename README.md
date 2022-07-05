@@ -20,13 +20,13 @@ disreg_eni07.xls
     - Made edits on "Sector de actividad" tab to format “CÓDIGOS QUE AGRUPA” as text with double digits  
     - Made edits on "Ocupación_ampliada" tab to format “​​Código” as text with double digits  
     
-población_provincia_serie_temporal.xls
-    - Registry information (padrón continuo) downloaded from: https://www.ine.es/jaxi/Tabla.htm?path=/t20/e245/p04/provi/l0/&file=0ccaa002.px&L=0
-    - Aggregated data files counted by year, province, and nationality
-    - To be read in and used in 1_process_raw.R for calculating co-ethnic density, I reshaped the raw Excel and calculated ethnic "densities" by year, province, and nationality
+población_provincia_serie_temporal.xls  
+    - Registry information (padrón continuo) downloaded from: https://www.ine.es/jaxi/Tabla.htm?path=/t20/e245/p04/provi/l0/&file=0ccaa002.px&L=0  
+    - Aggregated data files counted by year, province, and nationality  
+    - To be read in and used in 1_process_raw.R for calculating co-ethnic density, I reshaped the raw Excel and calculated ethnic "densities" by year, province, and nationality  
     
-CUESTIONARIO ENI 07 para publicar en IneBase - definitivo.pdf
-    - INE's survey questionnaire downloaded from https://www.ine.es/daco/daco42/inmigrantes/cues_es.pdf
+CUESTIONARIO ENI 07 para publicar en IneBase - definitivo.pdf  
+    - INE's survey questionnaire downloaded from https://www.ine.es/daco/daco42/inmigrantes/cues_es.pdf  
 
 **1_process_raw.R**  
 This program processes the ENI's raw microdata according to the corresponding metadata file which contains the registry design of the microdata. Attributes still need to be added to column names to create a data dictionary, but for now descriptions of processed variables can be found in comments under "Set and specify final processed variables" of this script.
