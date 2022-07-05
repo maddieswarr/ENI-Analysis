@@ -73,7 +73,7 @@ if (!dir.exists(output.dir)){
 ############## READ IN METADATA AND RAW MICRODATA #########################
 # Read in metadata (.xls), worksheet titled "Diseno"
 tryCatch((workBook <- XLConnect::loadWorkbook(codebook.dir)), error=function(e) 
-  stop(paste("Error. No se puede abrir el fichero: ", e, data_meta,". Saliendo de la ejecucion...", sep = "")))
+  stop(paste("Error. Can't open the file: ", e, data_meta,". Haltin execution...", sep = "")))
 codebook <- readNamedRegion(workBook, name = "PARAMETROS")
 
 # Gather metadata parameters
