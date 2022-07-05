@@ -3,8 +3,8 @@ Processing and analysis of the Encuesta nacional de inmigrantes from 2007.
 
 <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
 
-**data.zip**
-datos_eni_07.txt: 
+**data.zip**  
+datos_eni_07.txt:  
     - Raw microdata downloaded from: https://www.ine.es/ftp/microdatos/eni/datos_eni07.zip
     - 15,465 rows by 1,543 columns
     - Each row in the data represents a household, though most information is collected solely on one household member of reference
