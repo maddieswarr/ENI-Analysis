@@ -1,7 +1,12 @@
 # ENI-Analysis
 Processing and analysis of the Encuesta nacional de inmigrantes from 2007.
+Author: Madeline Swarr
 
-<a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
+*Data*  
+- Organization: INE  
+- Statistical operation: EPA  
+- Data production year: 2007    
+- URL: https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177005&menu=resultados&idp=1254735573002#!tabs-1254736195389
 
 **data.zip**  
 datos_eni_07.txt:  
@@ -23,3 +28,5 @@ The working draft of my research on the ENI, investigating how co-ethnic density
 
 **3_model_pop_output.R**  
 Space to do regression analysis. 
+
+<a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
