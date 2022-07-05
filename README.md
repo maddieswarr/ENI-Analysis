@@ -1,7 +1,7 @@
 # ENI-Analysis
 Processing and analysis of the Encuesta nacional de inmigrantes from 2007.
 
-*Author*: Madeline Swarr
+*Author*: Madeline Swarr  
 *Data*  
 - Organization: INE  
 - Statistical operation: EPA  
