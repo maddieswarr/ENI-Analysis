@@ -1,0 +1,437 @@
+---
+title: "MEDEG 2021-2022: Thesis Research Overview"
+subtitle: 'Social Capital and Economic Integration of Ethnic Immigrants in Spain (1998-2007)'
+author: "Madeline Swarr"
+date: "27 May 2022"
+
+header-includes:
+    - \usepackage{setspace}\singlespacing
+    - \usepackage[bottom]{footmisc}
+    - \usepackage{float}
+geometry: "left=1.7cm,right=1.7cm,top=1.8cm,bottom=1.8cm"
+output: html_document
+bibliography: references.bib
+csl: apa-5th-edition.csl
+nocite: "@*"
+fontsize: 12pt
+---
+
+**Last updated: `r format(Sys.time(), '%d %B %Y')`**
+
+```{r setup, echo = FALSE, warning = FALSE, message = FALSE}
+######################## Specify head directory ################
+head_dir <- "/Volumes/GoogleDrive/My Drive/Thesis/Data Analysis/ENI_ANALYSIS"
+run_date <- "02jul2022"
+
+######################## (Down)load libraries ######################
+dependency_dir <- paste0(head_dir, "/Pipeline/dependencies")
+source(paste0(dependency_dir, "/get_packages.R"))
+get_packages(c("plyr", "tidyverse", "ggplot2", "RColorBrewer", "openxlsx", "sf", "terra", "spData", 
+               "spDataLarge", "mapSpain", "tmap", "reshape", "gifski", "RColorBrewer", "kableExtra",
+               "MASS", "foreign", "Hmisc", "reshape2", "dplyr", "stargazer", "robustbase"))
+```
+
+## Background
+Social science has always been concerned with understanding the meso-level forces that connect individuals to the whole. In the case of the ethnic immigrant, this integration into a new society, characterized by differences in institutions, language, culture, and socioeconomic structure, is a long and arduous process that those of the native population do not always face, and if they do, do not face as intensely. 
+
+In immigration studies, the concept of “ethnic penalty” illustrates the fact that a meritocratic society does not exist for minorities, and that the degree of penalty on labor mobility and earnings depends on the ethnic group being referenced [@hasmath2012ethnic]. Therefore, the classic determinants of economic well-being for ethnic immigrants do not have the same effects as for those of the native population nor as for non-ethnic immigrants. As Kuznets puts it, “all minorities are characterized, at a given time, by an occupational structure distinctly narrower than that of the total population and the majority” [@kuznets1960economic]. Given the societal restrictions placed on minorities, the impact that social networks have on their social and economic integration becomes that much greater. This influence is evidenced in the long history of geographical concentration, sectoral specialization, and migration waves of immigrant groups by ethnicity [@chiswick2001determinants] [@kerr2015social]. 
+
+One’s social connections and ability to leverage those connections towards achieving positive economic outcomes must be analyzed in conjunction with financial and human capital to understand the situational well-being of immigrants at the micro level. 
+
+### (Abbreviated) Literature Review
+As developed in the late 1960s and early 1970s by a group of young Marxist economists, dual labor market theory states that developed economies are split into two sectors – the primary sector characterized by unions, good working conditions, and job security, and the secondary sector characterized by temporary contracts, minimum wage, poor working conditions, and little opportunity for promotion (see @doeringer1975unemployment for more). As the demographic and sectoral transition continues in the receiving country, a growing number of skilled jobs will go disproportionately to the native and educated population while vacated unskilled jobs go to the under-educated classes, minorities and immigrants, creating a labor market imbalance and segmentation that is hard to break out of [@harrison1979theory]. 
+
+The importance of social capital among immigrants for correcting for information imbalances, resource scarcity, cultural displacement, restricted rights, and discrimination has been documented extensively in the literature (see @massey1987social, @munshi2003networks, and @epstein2010migration for examples). Many fertile lines of research have shown that geographic and sectoral clustering of immigrant groups by ethnicity can provide economic support when it is lacking elsewhere, as well as breed productivity and innovation through information-sharing and skills acquisition (see @light1990korean, @ozgen2012immigration, and @kerr2015social for examples). Recent research has stressed the characterization of social capital to better isolate the effects they can have on socioeconomic outcomes. 
+
+While there are many interpretations of what constitutes social capital, my research will focus on the following four principal characteristics that have been discussed in the literature – personal relationships, trust and cooperative norms, social network support, and civic engagement (see @scrivens2013four for an overview).
+
+### Contextual Motivation
+According to the IOM’s 2020 World Migration Report, Spain was Europe's sixth most popular migrant destination in 2019 [@wmr2020]. Spain's as a major destination for international migration is a trend that began around the turn of the 20th century, with now at least 15% of the national population consisting of foreign nationals, with Morocco, Romania, United Kingdom, and Colombia representing the top countries of origin as of the second quarter of 2021 [@inepressrelease].^[These estimates vary due to the counting issues that arise from unregistered immigrants, as well as how an immigrant is defined. For example, an immigrant may be defined as anyone who is foreign-born (who may or may not have Spanish nationality), or anyone who possesses foreign citizenship.]
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, animation.hook="gifski", results='hide', fig.keep='all', fig.align = "center"}
+####################    Padrón directory specification   #######################
+padron_dir <- paste0(head_dir, "/Data/" )
+padron_data_name <- "población_provincia_serie_temporal.xlsx"
+output_dir <- paste0(head_dir, "/Output/", run_date, "/4_padron_prepared")
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = T)
+}
+
+####################   Prepare and merge geo data #########################
+## Population density attributes by province and country of origin
+dat_padron <- read.xlsx(paste0(padron_dir, "/", padron_data_name), sheet = 3, startRow = 8, cols = c(3:28)) 
+## Filter to all immigrants, reorder columns, and convert wide to long to be able to facet by year
+dat_padron_all_melt <- dat_padron %>% filter(Origin == "TOTAL EXTRANJEROS" & Destination_mapSpain != "Total") %>%
+  dplyr::select(c(Destination_mapSpain, Origin, `1998`:`2021`)) %>% melt(., id.vars = c("Destination_mapSpain", "Origin")) %>%
+  dplyr::rename(density = value, year = variable)
+## Get province shapes
+provinces <- esp_get_prov_siane()
+provinces_names <- levels(factor(provinces$ine.prov.name))
+## Merge attributes with geo data
+dat_geo <- sp::merge(provinces,
+                    dat_padron_all_melt,
+                    by.x = "ine.prov.name",
+                    by.y = "Destination_mapSpain",
+                    all.x = TRUE
+)
+
+################### Plot with tmap #####################
+## Plot immigration population density by province over years 1998 - 2021
+ethnic_density_map_anim <- tm_shape(dat_geo) +
+  tm_polygons("density", palette = "Reds", style="cont", n = 10, 
+              title = "Immigrant density \n (% of population)",
+              id = "ine.prov.name") +
+  tm_facets(along = "year", free.coords = FALSE) +
+  tm_legend(position = c("left", "top")) +
+  tm_credits(text = "Data source: INE's padrón continuo", position = c("right", "bottom"))
+ethnic_density_map_anim
+
+```
+\vspace{3truemm}
+
+There is a plethora of research documenting the changes of internal migration rates within Spain as well, with overwhelming evidence showing that foreigners are much more likely to move around the country than natives are in response to labor market demands, and that they are indeed meeting those demands with 45% of new employment being filled by immigrants in 2019 [@domenech2020]. This is a rather intuitive yet important finding considering that having high labor mobility is essential in fostering a robust and dynamic economic system able to respond quickly to shocks in supply and demand [@blanchardkatz1992]. The rather high prevalence of temporary contracts in Spain paired with concerns of growing systematic unemployment, stagnation in innovation, regional disparities in unemployment rates, and an aging population make it critical that immigration not be viewed as a burden, but rather as an opportunity to integrate young, diverse and dynamic labor into the Spanish workforce [@liu2018regional] [@roses2020accounting]. 
+
+## Data  
+### *Encuesta Nacional de Inmigrantes* (ENI) from 2007
+Principle data for this analysis consists of micro-level data from the Spanish National Institute of Statistics' (INE) National Survey of Immigrants (*Encuesta Nacional de Inmigrantes*, hereinafter referred to as the ENI). The survey consists of 15,465 immigrant households living in Spain as of 2007 that were randomly selected from predesignated pools of households with at least one individual registered as living there who met the following requirements: The individual 1) was born outside of Spain; 2) was 16 years or older at time of surveying; 3) had established residency in Spain for at least one year prior to surveying and if not the case, had the intention of staying in Spain for at least a year; and 4) for those who had Spanish nationality from birth (but born outside of Spain), must had been at least 2-years-old at the time of arrival to Spain. 
+
+The sampling process was defined at the autonomous community level on differing population strata to target certain groups of nationalities of interest, particularly those from Ecuador, Morocco, Romania, Latin American countries excluding Ecuador, African countries excluding South Africa, Asian countries excluding Japan, North American excluding Mexico and Oceania, and the EU15 and European Economic Area excluding EU member countries. 87.37% of the desired sample size was achieved (15,465 of 17,700), with 57.62% of surveyed households coming from the primary targeted population and 42.38% coming from the supplementary targeted population. Household surveys were carried out between November of 2006 and February of 2007.
+
+According to the INE's report on the ENI (or NIS as referred as below), 
+
+> "The National Immigrant Survey conducted in 2007 is aimed at studying the demographic and social characteristics of those persons born abroad, as well as their migratory itineraries, work and residential history, family relations and relations with their country of origin and with the Spanish society. NIS-2007 places a special emphasis on the study of social relations and personal networks linked to the act of migrating. The survey has a general purpose and a very broad subject matter, and is the first large survey on the recent migratory flows, covering the entire national territory and all immigrant groups." [@reher2008informe].^[Information on municipality of residence in Spain and history of movements between municipalities is available, but fictitious names of the municipalities are assigned for data protection reasons in accordance with the *Secreto Estadístico* of Spain. I am currently in the process of requesting de-anonomized data to be able to map ENI data onto municipal-level registry data.]
+
+**Link to the raw data, dictionaries, survey methodology, and questionnaire used to collect responses can be found [here](https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177005&menu=resultados&idp=1254735573002#!tabs-1254736195389 "ENI").** 
+
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center"}
+## Set directory where processed ENI data can be found
+input_dir <- paste0(head_dir, "/Output/", run_date, "/1_processed")
+## Load processed ENI data
+this_data <- readRDS(paste0(input_dir, "/datos_eni_07_processed_subset.rds"))
+this_data_all <- readRDS(paste0(input_dir, "/datos_eni_07_processed.rds"))
+
+## Restrict to immigrants who immigrated for economic reasons and came in 1998 or later
+this_data_restricted <- this_data_all %>% filter(economic == 1 & arrival_spain >= 1998)
+## Which countries are most represented?
+countries <- table(this_data_restricted$country) %>% as.data.frame(responseName = "Freq") %>% 
+  dplyr::rename(country = Var1) %>% arrange(desc(Freq))
+these_top_countries <- countries %>% filter(Freq > 175)
+
+## Year of arrival by most represented countries of origin
+this_data %>% filter(country %in% these_top_countries$country) %>% ggplot(aes(x=arrival_spain, fill=country)) +
+  geom_histogram(bins = 60) +
+  scale_fill_brewer(palette="Set2") +
+  labs(title = "Counts of immigrants in ENI by arrival year (1945 - 2007) \n Top represented countries (economic immigrants)",
+       x = "Arrival Year",
+       y = "Count",
+       fill = "Country of origin") +
+  scale_x_continuous(limits = c(1945, 2007)) +
+  theme_bw()
+
+```
+
+### *Estadística del Padrón continuo*
+Aggregate population data by year and Spanish province will be analyzed from the municipal registry database (*Estadística del Padrón continuo*) in order to map province-level yearly population data to immigrants in the ENI by country of origin. Registry data is available from 1998 onwards at the province-level (52 provinces), and from 2003 onwards at the municipal-level (8,112 municipalities). Spanish provinces are measured at the NUTS-3 level. Country of origin is measured at the GADM-1 level. Registry data for certain countries of origin with low representativeness is not available at an individual country-level, and thus must be grouped by regional categories.^[I am still in the process of consolidating these regional categories.] Municipal-level registry data is also available from 1997-2002, but it is stratified at the continent of origin level.
+
+**Link to the aggregated data files with registry information counted by year, province, and nationality can be found [here](https://www.ine.es/jaxi/Tabla.htm?path=/t20/e245/p04/provi/l0/&file=0ccaa002.px&L=0 "Padrón continuo").** 
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, results='hide', fig.keep='all', fig.align = "center", fig.height = 8, fig.width = 10, strip.white=T}
+## Filter population data by province to the top represented countries of origin and to year 2006
+dat_padron_top_2006 <- dat_padron %>% 
+  dplyr::filter((Origin %in% these_top_countries$country) & (Destination_mapSpain != "Total")) %>%
+  dplyr::select(c(Destination_mapSpain, Origin, `2006`))
+dat_padron_top_2006_melt <- melt(dat_padron_top_2006, id.vars = c("Destination_mapSpain", "Origin")) %>%
+  dplyr::rename(density = value, year = variable)
+## Get province shapes
+provinces <- esp_get_prov_siane()
+provinces_names <- levels(factor(provinces$ine.prov.name))
+## Merge attributes with geo data
+dat_geo_top_2006 <- sp::merge(provinces,
+                    dat_padron_top_2006_melt,
+                    by.x = "ine.prov.name",
+                    by.y = "Destination_mapSpain",
+                    all.x = TRUE
+)
+
+################### Plot with tmap #####################
+## Population density in 2006 for each country of top origin
+ethnic_density_top_2006 <- tm_shape(dat_geo_top_2006) +
+  tm_polygons("density", palette = "Reds", style="cont", n = 10, 
+              title = "Immigrant density \n (% of population)",
+              id = "ine.prov.name") +
+  tm_facets(by = "Origin", free.coords = FALSE, nrow = 4, ncol = 2) +
+  tm_layout(asp=0)
+ethnic_density_top_2006
+```
+
+## Analysis
+
+### Study Population
+To account for potential endogeneity stemming from systematic differences in economic motivation amongst immigrants, the population will be restricted to those deemed as “economic immigrants”, or those who have come to Spain “*por falta de empleo*” ($FEMPXX$), “*para buscar un empleo mejor*” ($BEMPXX$), or “*por cambio de destino laboral*” ($DSLAXX$).^[*Tabla 2.1* of ENI questionnaire documents individual’s migration histories, with the last entry representing his/her decision-making when immigrating to Spain.]
+
+On top of the population of economic immigrants, we will restrict to those who arrived in 1998 or later since registry data at the province-level by country of origin are only available from 1998 onwards ($ALLEXX$). 
+
+Finally, to maximize granularity of population data and minimize potential bias due to recall error, robustness checks will be implemented by restricting the population to those who had arrived to Spain in 2003 or later, since registry data at the municipal-level by country of origin are available from 2003 onwards, and a maximum recall window of four years is a reasonable window to minimize the effects of memory decay, while also maintaining a robust sample size.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+##################### POPULATION RESTRICTION ATTRITION #################
+restriction_data <- this_data %>% dplyr::select(economic, arrival_spain) %>% 
+  mutate(economic = ifelse(economic == 1, 1, 0), 
+         economic_1998 = ifelse(economic == 1 & arrival_spain >= 1998, 1, 0),
+         economic_2003 = ifelse(economic == 1 & arrival_spain >= 2003, 1, 0)) %>% 
+  dplyr::select(-arrival_spain)
+
+restriction_stats <- data.frame(yes = colSums(restriction_data ==1, na.rm = T),
+                                no = colSums(restriction_data==0, na.rm = T)) %>%
+mutate(total = no + yes,
+       percent = (yes/total)*100)
+
+
+rownames(restriction_stats) <- c("Economic?", 
+                                 "Economic and arrived post-1998?",
+                                 "Economic and arrived post-2003?")
+
+## Output restriction stats
+kable(restriction_stats, format = "html", digits = c(0, 0, 0, 2), row.names = T, align = 'c', 
+      col.names = c("Yes", "No", "Total", "% of Total (Yes)"),
+      caption = "ENI Population Restrictions") %>%
+  kable_styling()
+
+```
+
+### Modelling
+To test whether social capital, $SC$, has an effect on economic outcomes, $Y$, of an ethnic immigrant $i$ from country $c$ living in region $r$ at time of surveying, I will utilize the following theoretical model:
+
+$$Y_{i,c,r} = \beta_0 + \beta_1SC_{i,c,r} + \bf{\beta_x}x_{i,c,r} + \epsilon $$
+According to the work of @carliner1980wages that compares the wages and hours worked of immigrants to the U.S. across three generations, in addition to the classic Mincer determinants such as education ($EDUC$) and prior work experience ($EXP$), human capital can be proxied for by time spent in the destination country ($YEARS$) as one goes accustoming to the new culture, norms, and general way of life in which he finds himself. Controls will also be included for age ($AGE$), the square of age ($AGE^2$), and sex ($SEX$).^[A control for whether one has a spouse or family will also be considered.] Additionally, location-based fixed effects such as language, culture, and other time-invariant omitted variables are proxied for using home and destination locations ($COUNTRY$, $REGION$).^[Due to high multicollinearity between $REGION$, $COUNTRY$, and the measure of co-ethnic density, more aggregate or variable measures of $COUNTRY$ and $REGION$ will be considered, like urban vs. rural or the depravity index to measure $REGION$, and continent of origin instead of $COUNTRY$.] Time-variant controls will be investigated to try to account for changing job markets over time by location when looking at response variables measured in different years (time it took to find a first job, for example, which depends on the year in which the immigrant arrived).^[The deprivation index for small areas in Spain may be controlled for as has been done in @becares2015social [@sanchez2008deprivation].] Finally, one’s legal status ($PERMIT$) plays a significant role in determining economic and social outcomes, as well as whether one was even observed in the ENI data or answered truthfully or accurately the questions of the survey. Having work/residency authorization prior to arrival in Spain is an indicator of those who came with pre-contracted work and thus may indicate systematic differences arising from selection bias of this population.^[In 1985, the General Regime was established to grant employers visa quotas that they could use to sponsor foreign workers. Broad reforms of the degree took place during the 2000s that were effective in creating a demand-driven system focused on filling the fastest growing industries [@imopolicies].] 
+
+#### Response Variables
+**Earnings and wages:** The principal response variables to be measured will deal with earnings, specifically monthly earnings and hourly earnings. Monthly earnings variable can either be answered with a real value ($INGRE$) or by a given range ($INGRTR$), but an analysis using salary ranges will only be conducted in the case of a low-powered sample. Hourly earnings ($EARN$) will be calculated by dividing monthly earnings ($INGRE$) by hours worked a week ($HORAS2$) multiplied by four to get hours worked habitually a month. When measuring earnings and wages, the population will be restricted to those individuals who work at least 30 hours a week or more habitually.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, fig.height = 7.0, fig.width = 9}
+this_pop <- this_data_restricted %>% filter(country %in% these_top_countries$country)
+## Hourly earnings
+mu_hour_earn <- ddply(this_pop, c("sector2", "country"), summarise, grp.mean=mean(hour_earn, na.rm = T)) 
+mu_hour_earn_all <- ddply(this_pop, c("country"), summarise, grp.mean=mean(hour_earn, na.rm = T)) %>%
+  mutate(sector2 = "All")
+
+## Hourly earnings distribution by sector of work, facetted on country of origin
+gg_hour_earn <- this_pop %>% mutate(sector2_trim = gsub(";.*", "", sector2)) %>%
+  ggplot(aes(hour_earn, fill = sector2_trim, color = sector2_trim)) + 
+  geom_histogram(stat = "bin", bins = 40) +
+  labs(title = "Counts of immigrants by hourly earnings reported and sector of activity",
+       x = "Estimated hourly earnings",
+       y = "Count",
+       fill = "Sector of activity") +
+  geom_vline(data=mu_hour_earn, aes(xintercept=grp.mean, color=sector2),
+             linetype="dashed") +
+  geom_vline(data=mu_hour_earn_all, aes(xintercept=grp.mean), color = "black", linetype = "solid") +
+  theme(legend.position="right") + 
+  facet_grid(country~., scales = "free") +
+  scale_x_continuous(limits = c(0, 18)) +
+  guides(color = F)
+gg_hour_earn
+```
+
+**Employment history:** Secondary response variables of interest will look at employment and unemployment situations, specifically the time it took to find a first job upon arriving to Spain ($TPO1$) and the number of unemployment periods experienced for a month or more ($NVPARO$), both measured on an ordinal scale.
+
+#### Explanatory Variables
+In order to measure the dimensions of social networks and social capital, I will utilize questions related to social characteristics from the ENI data as naïve proxies for the following three out of four dimensions mentioned previously: personal relationships, social network support, and civic engagement. Trust and cooperative norms will be proxied for by the concentration of co-ethnics living in a given province/municipality, defined as the proportion of the population of the same country of origin that were registered as of January 1, 2006 as living in the same Spanish province/municipality as the immigrant of reference. To address the potentially endogenous decision to move to a certain province/municipality where one *expects* to be able to leverage co-ethnic networks for economic well-being, I will assess the possibility of instrumenting "concentration of co-ethnics" for country of origin *c* in region *r* in 2006 with corresponding data from the earliest year available.
+
+![Social capital measures and ENI variable proxies.](/Users/papapeach/Documents/Jobs/Policy Map:Reinvestment Fund/Research sample/social_cap_var_chart.jpg)
+
+##### Social network support
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+## Filter to the principal study population (economic immigrants that arrived in 1998 or later)
+study_pop <- this_data_all %>% filter(economic == 1 & arrival_spain >= 1998)
+
+##################### Social network support ###############
+support_data <- study_pop %>%
+  dplyr::select(LLCONT, CONFAM, networked)
+
+## Stats by variable
+support_stats <- data.frame(yes = colSums(support_data==1, na.rm = T),
+                            no = colSums(support_data==0, na.rm = T)) %>%
+  mutate(total = no + yes,
+         percent = (yes/total)*100)
+
+## Stats by any variable                             
+support_data_any <- data.frame(support_index = rowSums(support_data, na.rm = T))
+support_stats_any <- data.frame(yes = sum(support_data_any>0),
+                                no = sum(support_data_any==0)) %>%
+  mutate(total = no + yes,
+         percent = (yes/total)*100)
+
+## Append stats by variable and stats by any variable
+support_stats_all <- rbind(support_stats, support_stats_any)
+rownames(support_stats_all) <- c("LLCONT", "CONFAM", "FORM04", "Any support")
+
+## Output stats 
+kable(support_stats_all, format = "html", digits = c(0, 0, 0, 2), row.names = T, align = 'c', 
+      col.names = c("Yes", "No", "Total", "% of Total (Yes)"),
+      caption = "Social network support counts by ENI variables") %>%
+  kable_styling()
+```
+
+##### Civic engagement and participation
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+################### Civic engagement and participation ######################
+participation_data <- study_pop %>%
+  dplyr::select(starts_with(c("PNX", "PX", "PELEC"))) %>% filter(complete.cases(.))
+
+## Select anyone that responded to civic engagement and participation questions
+participation_data_all <- study_pop %>% 
+  dplyr::filter(!is.na(participation_index)) %>%
+  dplyr::select(participation_indicator)
+
+## Stats by variable
+civic_engagement_stats <- data.frame(yes = colSums(participation_data==1, na.rm = T),
+                                     no = colSums(participation_data==0, na.rm = T)) %>%
+  mutate(total = nrow(participation_data),
+         percent = (yes/total)*100)
+
+## Stats by any variable                                  
+civic_engagement_stats_any <- data.frame(yes = sum(participation_data_all==1),
+                                         no = sum(participation_data_all==0)) %>%
+  mutate(total = nrow(participation_data_all),
+         percent = (yes/total)*100)
+
+## Append stats by variable and stats by any variable
+civic_engagement_stats_all <- rbind(civic_engagement_stats, civic_engagement_stats_any)
+rownames(civic_engagement_stats_all) <- c(rownames(civic_engagement_stats), "Any participation")
+
+## Output stats
+kable(civic_engagement_stats_all, format = "html", digits = c(0, 0, 0, 2), row.names = T, align = 'c', 
+      col.names = c("Yes", "No", "Total", "% of Total (Yes)"),
+      caption = "Civic engagement and participation counts by ENI variables") %>%
+  kable_styling()
+```
+
+### Hypothesis Testing
+Using the standard Mincer equation as a basis, the multiple linear regression models estimating the log of monthly earnings and the log of hourly earnings ($logEARN$) for an individual ethnic immigrant to Spain at time of surveying will be the following:
+
+\begin{equation*}
+  \begin{aligned}logEARN_{i,c,r} = \beta_0 + \beta_1SC_{i,c,r} + \beta_2EDUC_i + \beta_3EXP_i + \beta_4LANG_i + \beta_5YEARS_i + \beta_6AGE_i + \beta_7AGE^2_i + \beta_8SEX_i + \beta_{9}COUNTRY_c + \\ \beta_{10}REGION_r + \beta_{11}PERMIT_i + \epsilon_{i,c,r}
+    \end{aligned}
+\end{equation*}
+
+When $SC$ represents co-ethnic density that corresponds to immigrant $i$ from country $c$ living in region $r$, the coefficient of interest, $\beta_{1}$, represents the difference in log of monthly earnings or log of hourly earnings for someone with one percentage point more of the population in the province in which he is living made up of co-ethnics, *ceteris paribus*.^["Co-ethnic" is defined as someone with the same nationality as the reference individual.] 
+
+In the simplest case for which $SC$ is a binary indicator of whether someone possesses at least one of the indicators for social capital, the coefficient of interest, $\beta_{1}$, represents the baseline difference in log of monthly earnings and log of hourly earnings between someone who possess social capital ($SC = 1$) versus a similar someone who does not ($SC = 0)$.
+
+It is plausible that amongst immigrants of the same ethnic group there will not be much variation in the sector in which they work. To understand the effect of social capital given that sectoral choice is often limited for ethnic immigrants, it might be more appropriate to examine the interaction between social capital and job sector and its effect on wages. Therefore, the linear models we would be more interested in estimating would be the following: 
+
+\begin{equation*}
+  \begin{aligned}
+logEARN_{i,c,r} = \beta_0 + \beta_1SC_{i,c,r} + \beta_2SECTOR + \beta_3SC \times SECTOR + \beta_4EDUC_i + \beta_5EXP_i + \beta_6LANG_i + \beta_7YEARS_i + \\ \beta_8AGE_i + \beta_9AGE^2_i + \beta_{10}SEX_i + \beta_{11}COUNTRY_c + \beta_{12}REGION_r + \beta_{13}PERMIT_i + \epsilon_{i,c,r}
+  \end{aligned}
+\end{equation*}
+
+The hypothesis would then be that social capital carries differing effects for certain occupational sectors (and thus for certain immigrant groups), possibly carrying more effect for those sectors where information-sharing, trust, and collaboration are more important for productivity. Once again taking the naïve social capital dummy variable, we would test this hypothesis by looking at the effect, $\beta_3$, of the interaction between social capital and occupation sector of employment $SC \times SECTOR$. If there are three sectors, for example, then the term $\beta_3 SC \times SECTOR$ would be expanded as such:
+
+$$\beta_3SC \times SECTOR = \beta_{3,1}SC \times SECTOR_1 + \beta_{3,2}SC \times SECTOR_2 + \beta_{3,3}SC \times SECTOR_3$$
+with $SECTOR_i$ as a binary indicator of whether the person works in $SECTOR_i$ or not. We would test the following null hypothesis to see whether there is an additive effect of social capital and occupational sector:
+
+$$H_0: \beta_{3,1} = \beta_{3,2} = \beta_{3,3} = 0$$
+and the following null hypothesis to see whether the additive effects of social capital and occupational sector differ by occupational sector:
+
+$$H_0: \beta_{3,1} \ne \beta_{3,2} \ne \beta_{3,3} = 0$$
+Other interactions will be tested as well, specifically ones where the effect of having more social capital are expected to be more advantageous (or disadvantageous) for certain groups over others. These interactions could be by gender ($SEX$) or by country of origin ($COUNTRY$).
+
+### Preliminary Regressions
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+# Restrict to primary study population 
+this_pop <- this_data_restricted %>% dplyr::filter(!is.na(log_hour_earn)) %>% mutate(eth_dens_prov_sq_2006 = eth_dens_prov_2006^2)
+this_pop$spanish <- factor(this_pop$spanish, levels = c("Necesita mejorar", "Suficiente", "Bien", "Nativo"))
+this_pop$sex <- factor(this_pop$sex, levels = c("Male", "Female"))
+
+#### Models for Table 1 #####
+ethn1 <- lm(log_hour_earn ~ eth_dens_prov_2006 + eth_dens_prov_sq_2006, data = this_pop)
+supp1 <- lm(log_hour_earn ~ any_support, data = this_pop)
+part1 <- lm(log_hour_earn ~ participation_indicator, data = this_pop)
+# With covariates
+model5 <- lm(log_hour_earn ~ eth_dens_prov_2006 + eth_dens_prov_sq_2006 + any_support + participation_indicator + MNIV + spanish + years + age + age_sq + sex + work_permit, data = this_pop)
+model6 <- lm(log_hour_earn ~ eth_dens_prov_2006 + eth_dens_prov_sq_2006+ any_support + participation_indicator + MNIV + spanish + years + age + age_sq + sex + work_permit + sector2, data = this_pop)
+model7 <- lm(log_hour_earn ~eth_dens_prov_2006 + eth_dens_prov_sq_2006+ any_support + participation_indicator + MNIV + spanish + years + age + age_sq + sex + work_permit + sector2 + occupation2, data = this_pop)
+model8 <- lm(log_hour_earn ~ eth_dens_prov_2006 + eth_dens_prov_sq_2006+ any_support + participation_indicator + MNIV + spanish + years + age + age_sq + sex + work_permit + sector2 + occupation2 + country, data = this_pop)
+model9 <- lm(log_hour_earn ~ eth_dens_prov_2006 + eth_dens_prov_sq_2006+ any_support + participation_indicator + MNIV + spanish + years + age + age_sq + sex + work_permit + sector2 + occupation2 + country + municipality, data = this_pop)
+
+```
+
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
+#### Table 1 ####
+stargazer(ethn1, supp1, part1, model5, model6, model7, model8, model9,
+          type="html",
+          title = "Effect of social capital variables on log of estimated hourly earnings, with covariates",
+          #colnames = FALSE,
+          #column.labels = c("Total"),
+          #column.separate = c(3, 5),
+          dep.var.labels = "Log of estimated hourly earnings",
+          dep.var.labels.include = T,
+          covariate.labels = c("Co-ethnic concentration", "Co-ethnic concentration squared", "Support upon arrival", "Civic engagement", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Years in Spain", "Age", "Age squared", "Female", "Work authorization?"),
+          keep = ,
+          omit = c("sector2", "occupation2", "country", "municipality"),
+          add.lines=list(c('Sector controls', "No", "No", "No", "No", "Yes", "Yes", "Yes", "Yes"),
+             c('Occupation controls', "No", "No", "No", "No", "No", "Yes", "Yes", "Yes"),
+             c('Country of origin controls', "No", "No", "No", "No", "No", "No", "Yes", "Yes"),
+             c('Municipality controls', "No", "No", "No", "No", "No", "No", "No", "Yes")),
+          column.sep.width = "1pt",
+          header=FALSE,
+          no.space = F,
+          digits = 3,
+          df = FALSE,
+          single.row = F,
+          font.size = "footnotesize",
+          notes.align = "c",
+          keep.stat = c("n", "rsq", "f", "ser"),
+          table.placement = "H")
+
+```
+#### Observations
+1. There is a significant negative effect of co-ethnic concentration in models (4) through (6) at $\alpha \le 0.1$). The models provide better fit when the effect is modeled as quadratic (not shown), and the coefficients indicate a convex effect for the most part, except in model (7). In model (7), this effect becomes positive but negligible and insignificant when controlling for country of origin. 
+
+2. The negative effect of having friends or family to direct to upon arriving in Spain on the log of estimated hourly wage seen in model (2) gets absorbed with the addition of other covariates. 
+
+3. In models (3) through (7), we see a positive and significant effect of civic engagement on wages. The high magnitude effect (on the order of a ~8.0% average increase in wages for those who have participated in a local organization or voted in a municipal election versus those who haven't) decreases as we control for more covariates. When controls for education and years since arrival are added (not shown), we see that the ones who are highly educated and have been in Spain more years are more likely to have participated in a local organization or voted in municipal elections, hence the decrease in the positive effect of civic engagement. 
+
+4. Level of Spanish, which is hard to measure and a strong predictor of country of origin, might be better captured by years lived in Spain and country of origin.
+
+5. Work authorization is expectedly a strong, positive predictor of hourly wages.
+
+#### Issues  
+1. There's not much variation in country of origin for high co-ethnic concentration levels (multicollinearity). Alternatively put, the most highly "ethnic" provinces are represented mainly by a few of the largest sending countries (Romania, Morocco, Ecuador). Thus, we don't know if we are controlling for country of origin or co-ethnic density, which are measured at different levels. 
+
+2. Generally there is a lot of collinearity between the variables and not much sample size. 
+
+3. Non-randomness of immigration and settlement patterns. Endogeneity from the decision to live in a certain zone, which is likely to be decided upon with economic-related considerations in mind. 
+
+#### Next steps
+1. Find more variation in the ethnic concentration measure.
+
+2. Perhaps consider the restriction of having to have immigrated for economic reasons to be used as a robustness check to enhance sample size. 
+
+3. Drop Spanish ability as a predictor. 
+
+4. Interaction terms (civic engagement and gender, ethnic density and sector or country of origin).
+
+5. Instrument co-ethnic density with earliest ethnic density data available.
+
+6. Look into other response variables – social networks and unemployment and labor mobility? For those who have a lot of ethnic social support upon arriving (but no pre-arranged job), how likely were they to find a first job quickly or
+be in PARO? For those who got their first job through contacts, how likely were they to upgrade their jobs
+
+
+\newpage
+
+## References
+<div id="refs"></div>
+
+\newpage
+
+## Code for this report  
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
+
+
