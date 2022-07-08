@@ -33,9 +33,9 @@ options(java.parameters = "-Xmx4g" )
 
 ########### PARAMETERS AND SWITCHES #########
 # Run date, for archiving purposes
-run_date <- "02jul2022"
+run_date <- "06jul2022"
 # Do you need to read in the raw data?
-readin.raw <- 0
+readin.raw <- 1
 # Do you want to housemate demographic information like gender, age, nationality? WARNING: Long processing step
 get_housemate_demographics <- 1
 # Do you want to get information about where siblings live in relation to reference individual?
@@ -45,9 +45,9 @@ get_spanish_ability <- 1
 
 ################## SET UP ###################
 # Specify directories
-head.dir <- "/Volumes/GoogleDrive/My Drive/Thesis/Data Analysis/ENI_ANALYSIS"
-dependency.dir <- paste0(head.dir, "/Pipeline/dependencies")
-key.dir <- paste0(head.dir, "/Pipeline/keys")
+head.dir <- "/Users/papapeach/Documents/UC3M/Thesis/Data Analysis/ENI-Analysis"
+dependency.dir <- paste0(head.dir, "/dependencies")
+key.dir <- paste0(head.dir, "/keys")
 # Source dependencies
 source(paste0(dependency.dir, "/get_packages.R"))
 # Download and load necessary packages/libraries
@@ -56,7 +56,7 @@ get_packages(c("XLConnect", "openxlsx", "plyr", "tidyverse", "reshape2", "utile.
 # Input data names
 data_micro <- "datos_eni_07.txt"
 data_meta  <- "disreg_eni07.xls"
-data_ppr <- "población_provincia_serie_temporal.xlsx"
+data_ppr <- "población_provincia_serie_temporal_por_sexo.xlsx"
 # Google Cloud key for access to Translate
 key_GoogleTranslate <- "medeg-thesis-translator-d96fe6bca7c2.json"
 
@@ -192,7 +192,7 @@ for (m in 1:length(motive_var_prefixes)){
 
 #### Set to NA any values that represent missing values ####
 this_data <- this_data %>% mutate(EDAD = na_if(EDAD, 999),
-                                  PNAC = na_if(PNAC, "   "),
+                                  PNAC = ifelse(str_trim(PNAC) == "", NA, str_trim(PNAC)), 
                                   NESP = na_if(NESP, 0),
                                   HORAS2 = na_if(HORAS2, 999),
                                   RECANT = na_if(RECANT, 99999),
@@ -210,7 +210,8 @@ this_data <- this_data %>% mutate(EDAD = na_if(EDAD, 999),
                                   NUMHH = na_if(NUMHH, 99),
                                   TENHH = na_if(TENHH, 0),
                                   ANOCOM = na_if(ANOCOM, 0),
-                                  NCONTR = na_if(NCONTR, 99)
+                                  NCONTR = na_if(NCONTR, 99),
+                                  PR1VI = ifelse(str_trim(PR1VI) == "" | str_trim(PR1VI) == "00", NA, str_trim(PR1VI))
 )
 
 ####  Hash in info from metadata ####
@@ -259,6 +260,7 @@ hash_provinces <- hash()
 .set(hash_provinces, keys = province_codebook$CODIGO_PROVINCIA, values = province_codebook$NOMBRE_PROVINCIA)
 this_data$province <- hash::values(hash_provinces, keys = this_data$CPRO)
 this_data$province <- trimws(this_data$province)
+this_data$province_PR1VI[!is.na(this_data$PR1VI)] <- hash::values(hash_provinces, keys = this_data$PR1VI[!is.na(this_data$PR1VI)])
 clear(hash_provinces)
 
 # Hash in comunidad autónoma of residence info 
@@ -370,13 +372,20 @@ anom_data <- this_data %>% dplyr::select(starts_with("ANOM")) %>%
   mutate_all(na_if, 0)
 # Last non-missing entry represents the year in which individual started living in their current municipality of residence
 this_data$ANOM <- anom_data[cbind(1:nrow(anom_data), max.col(!is.na(anom_data), ties.method = 'last'))]
-# If missing start year of municipal residence, take year that 
+# If missing start year of municipal residence, take year that current work contract started
+# If not missing start year of municipal residence nor year that current work contract started, then take the latter. Otherwise, take the former
 this_data$ANOM_min <- ifelse(is.na(this_data$ANOM) & !is.na(this_data$ANOCOM), this_data$ANOCOM, ifelse(!is.na(this_data$ANOCOM) & (this_data$ANOCOM > this_data$ANOM), this_data$ANOCOM, this_data$ANOM))
+# If start of residence/contract year was before 1998, set value to 1998 (since we do not have padron data prior to this)
 this_data$ANOM_floor <- ifelse(this_data$ANOM_min < 1998, 1998, this_data$ANOM_min)
+# For those who are missing start year of municipal residence and year of current work contract, look to other variables
+# If individual has never changed addresses since arriving, then take year of arrival as ANOM_floor
+this_data$ANOM_floor[which(is.na(this_data$ANOM_floor))] <- ifelse(this_data$CBVIV == 6, this_data$ALLE, ifelse(!is.na(this_data$province_PR1VI), this_data$province_PR1VI, NA))[which(is.na(this_data$ANOM_floor))]
+# If individual
 
 # Merge in population data by province and country of origin
-padron_province_data <- read.xlsx(padron_province.dir, sheet = 3, startRow = 8, cols = c(2:28)) 
-this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "1998":"2007")], by.x = c("province", "country"), by.y = c("Destination", "Origin"), all.x = TRUE)
+padron_province_data <- read.xlsx(padron_province.dir, sheet = 3, startRow = 8, cols = c(2:29)) 
+this_data$sex <- mapvalues(this_data$SEXO, from = c(1, 2), to = c("Male", "Female"))
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "1998":"2007")], by.x = c("province", "country", "sex"), by.y = c("Destination", "Origin", "SEXO"), all.x = TRUE)
 this_data$eth_dens_prov = NA
 for (year in c(1998:2007)) {
   these_obs = which(this_data$ANOM_floor == year)
@@ -429,7 +438,7 @@ study_data <- this_data %>% mutate(#### COVARIATES ####
                                     # Age squared
                                     age_sq = EDAD^2,
                                     # Sex
-                                    sex = mapvalues(this_data$SEXO, from = c(1, 2), to = c("Male", "Female")),
+                                    sex = sex,
                                     # Highest level of studies achieved
                                     education = education,
                                     # If he/she has Spanish residence (automatic "yes" if country of origin is an EU member)
@@ -563,7 +572,7 @@ study_data_subset <- study_data %>% dplyr::select(IDQ, NPERS, arrival_spain, arr
                                                   eth_dens_prov_2006, eth_dens_prov, log_eth_dens_prov, eth_dens_prov_sq, influenced,
                                                   first_job_still, insecurity, precontract, form, networked,
                                                   support_index, any_support, housing_connect, participation_index, participation_indicator,
-                                                  num_siblings, reference_person, motive_var_prefixes, final_vars)
+                                                  num_siblings, reference_person, motive_var_prefixes, all_of(final_vars))
 
 ######################### Save processed data frames ##############################
 saveRDS(study_data, file = paste0(output.dir, "/datos_eni_07_processed.rds"))
