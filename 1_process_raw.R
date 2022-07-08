@@ -64,7 +64,7 @@ key_GoogleTranslate <- "medeg-thesis-translator-d96fe6bca7c2.json"
 input.dir <- paste0(head.dir, "/Data")
 codebook.dir <- paste0(input.dir, "/", data_meta)
 padron_province.dir <- paste0(input.dir, "/", data_ppr)
-output.dir <- paste0(head.dir, "/Output/", run_date, "/1_processed")
+output.dir <- paste0(head.dir, "/output/", run_date, "/1_processed")
 # Create output directory
 if (!dir.exists(output.dir)){
   dir.create(output.dir, recursive = T)
