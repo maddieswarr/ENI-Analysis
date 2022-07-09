@@ -372,25 +372,17 @@ anom_data <- this_data %>% dplyr::select(starts_with("ANOM")) %>%
   mutate_all(na_if, 0)
 # Last non-missing entry represents the year in which individual started living in their current municipality of residence
 this_data$ANOM <- anom_data[cbind(1:nrow(anom_data), max.col(!is.na(anom_data), ties.method = 'last'))]
-# If missing start year of municipal residence, take year that current work contract started
-# If not missing start year of municipal residence nor year that current work contract started, then take the latter. Otherwise, take the former
-this_data$ANOM_min <- ifelse(is.na(this_data$ANOM) & !is.na(this_data$ANOCOM), this_data$ANOCOM, ifelse(!is.na(this_data$ANOCOM) & (this_data$ANOCOM > this_data$ANOM), this_data$ANOCOM, this_data$ANOM))
+# If missing start year of municipal residence, take year of arrival to Spain if they have indicated that they have never moved houses
+this_data$ANOM_floor <- ifelse(!is.na(this_data$ANOM), this_data$ANOM, 
+                               ifelse(this_data$CBVIV == 6 | this_data$PRVIV == 1, this_data$ALLE, NA))
 # If start of residence/contract year was before 1998, set value to 1998 (since we do not have padron data prior to this)
-this_data$ANOM_floor <- ifelse(this_data$ANOM_min < 1998, 1998, this_data$ANOM_min)
-# For those who are missing start year of municipal residence and year of current work contract, look to other variables
-# If individual has never changed addresses since arriving, then take year of arrival as ANOM_floor
-this_data$ANOM_floor[which(is.na(this_data$ANOM_floor))] <- ifelse(this_data$CBVIV == 6, this_data$ALLE, ifelse(!is.na(this_data$province_PR1VI), this_data$province_PR1VI, NA))[which(is.na(this_data$ANOM_floor))]
-# If individual
+this_data$ANOM_ceiling <- ifelse(this_data$ANOM_floor < 1998, 1998, this_data$ANOM_floor)
 
 # Merge in population data by province and country of origin
-padron_province_data <- read.xlsx(padron_province.dir, sheet = 3, startRow = 8, cols = c(2:29)) 
+# Convert population data from wide to long
+padron_province_data <- read.xlsx(padron_province.dir, sheet = 3, startRow = 8, cols = c(2:29)) %>% melt() %>% dplyr::rename(year = variable, eth_dens_prov = value)
 this_data$sex <- mapvalues(this_data$SEXO, from = c(1, 2), to = c("Male", "Female"))
-this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "1998":"2007")], by.x = c("province", "country", "sex"), by.y = c("Destination", "Origin", "SEXO"), all.x = TRUE)
-this_data$eth_dens_prov = NA
-for (year in c(1998:2007)) {
-  these_obs = which(this_data$ANOM_floor == year)
-  this_data$eth_dens_prov[these_obs] <-  eval(parse(text = paste0("this_data$`", year, "`")))[these_obs]
-}
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "pop_percent")], by.x = c("province", "country", "sex", "ANOM_ceiling"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
 
 #### Indicators of social ties after arriving in Spain
 this_data$LLCONT <- mapvalues(this_data$LLCONT, from = c(1, 6), to = c(1, 0))
