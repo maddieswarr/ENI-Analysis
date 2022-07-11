@@ -33,11 +33,11 @@ options(java.parameters = "-Xmx4g" )
 
 ########### PARAMETERS AND SWITCHES #########
 # Run date, for archiving purposes
-run_date <- "06jul2022"
+run_date <- "11jul2022"
 # Do you need to read in the raw data?
-readin.raw <- 1
+readin.raw <- 0
 # Do you want to housemate demographic information like gender, age, nationality? WARNING: Long processing step
-get_housemate_demographics <- 1
+get_housemate_demographics <- 0
 # Do you want to get information about where siblings live in relation to reference individual?
 get_sibling_residence_info  <- 1
 # Do you want to get the individual's reported Spanish level in speaking, reading, writing, and comprehension?
@@ -56,7 +56,7 @@ get_packages(c("XLConnect", "openxlsx", "plyr", "tidyverse", "reshape2", "utile.
 # Input data names
 data_micro <- "datos_eni_07.txt"
 data_meta  <- "disreg_eni07.xls"
-data_ppr <- "población_provincia_serie_temporal_por_sexo.xlsx"
+data_ppr <- "poblacion_provincia_serie_temporal_por_sexo.xlsx"
 # Google Cloud key for access to Translate
 key_GoogleTranslate <- "medeg-thesis-translator-d96fe6bca7c2.json"
 
@@ -203,8 +203,8 @@ this_data <- this_data %>% mutate(EDAD = na_if(EDAD, 999),
                                   OCUP2 = ifelse(str_trim(CIOCUP2) == "", NA, str_trim(CIOCUP2)),
                                   OCUP3 = ifelse(str_trim(CIOCUP3) == "", NA, str_trim(CIOCUP3)),
                                   SECT1 = ifelse(str_trim(SECT1) == "" | str_trim(SECT1) == "00", NA, str_trim(SECT1)),
-                                  SECT2 = ifelse(str_trim(SECT2) == "", NA, str_trim(SECT2)),
-                                  SECT3 = ifelse(str_trim(SECT3) == "", NA, str_trim(SECT3)),
+                                  SECT2 = ifelse(str_trim(SECT2) == "" | str_trim(SECT2) == "00", NA, str_trim(SECT2)),
+                                  SECT3 = ifelse(str_trim(SECT3) == "" | str_trim(SECT3) == "00", NA, str_trim(SECT3)),
                                   TPO1 = na_if(TPO1, 0),
                                   DOCUM = na_if(DOCUM, 0),
                                   NUMHH = na_if(NUMHH, 99),
@@ -238,8 +238,14 @@ this_data$country_short[!is.na(this_data$PNAC)] <- hash::values(hash_countries_s
 clear(hash_countries_short)
 
 # Hash in whether country of origin is an EU member or not
+hash_country_eu <- hash()
+.set(hash_country_eu, keys = country_codebook$CÓDIGO.DEL.PAÍS.NACIONALIDAD, values = country_codebook$EU)
+this_data$country_eu[!is.na(this_data$PNAC)] <- hash::values(hash_country_eu, keys = this_data$PNAC[!is.na(this_data$PNAC)])
+clear(hash_country_eu)
+
+# Hash in country classification
 hash_country_class <- hash()
-.set(hash_country_class, keys = country_codebook$CÓDIGO.DEL.PAÍS.NACIONALIDAD, values = country_codebook$EU)
+.set(hash_country_class, keys = country_codebook$CÓDIGO.DEL.PAÍS.NACIONALIDAD, values = country_codebook$GROUPING)
 this_data$country_class[!is.na(this_data$PNAC)] <- hash::values(hash_country_class, keys = this_data$PNAC[!is.na(this_data$PNAC)])
 clear(hash_country_class)
 
@@ -253,7 +259,7 @@ clear(hash_language)
 hash_country_spanish <- hash()
 .set(hash_country_spanish, keys = country_codebook$CÓDIGO.DEL.PAÍS.NACIONALIDAD, values = country_codebook$ESPANOL_LENGUA_MATERNA)
 this_data$country_spanish[!is.na(this_data$PNAC)] <- hash::values(hash_country_spanish, keys = this_data$PNAC[!is.na(this_data$PNAC)])
-clear(hash_country_class)
+clear(hash_country_spanish)
 
 # Hash in province of residence in Spain info
 hash_provinces <- hash()
@@ -286,7 +292,7 @@ clear(hash_occupation)
 # SECT2 = sector of current occupation
 # SECT3 = sector of occupation in first job upon arriving in Spain
 hash_sector <- hash()
-.set(hash_sector, keys = sector_codebook$CÓDIGOS.QUE.AGRUPA, values = sector_codebook$CLASIFICACIÓN.ACTIVIDADES)
+.set(hash_sector, keys = sector_codebook$CÓDIGOS.QUE.AGRUPA, values = sector_codebook$SHORT)
 this_data$sector1[!is.na(this_data$SECT1)] <- hash::values(hash_sector, keys = this_data$SECT1[!is.na(this_data$SECT1)])
 this_data$sector2[!is.na(this_data$SECT2)] <- hash::values(hash_sector, keys = this_data$SECT2[!is.na(this_data$SECT2)])
 this_data$sector3[!is.na(this_data$SECT3)] <- hash::values(hash_sector, keys = this_data$SECT3[!is.na(this_data$SECT3)])
@@ -377,12 +383,22 @@ this_data$ANOM_floor <- ifelse(!is.na(this_data$ANOM), this_data$ANOM,
                                ifelse(this_data$CBVIV == 6 | this_data$PRVIV == 1, this_data$ALLE, NA))
 # If start of residence/contract year was before 1998, set value to 1998 (since we do not have padron data prior to this)
 this_data$ANOM_ceiling <- ifelse(this_data$ANOM_floor < 1998, 1998, this_data$ANOM_floor)
+# Need to instrument with the corresponding measure from five years before the year of arrival to ensure enough temporal space for independence of the settlement 
+# decision from the instrument. Since registry data by country of origin are available from 1998 onwards, the population will have to be restricted to those immigrants 
+# who arrived in 2002 or later
+this_data$ANOM_iv <- ifelse(this_data$ANOM_ceiling - 3 < 1998, 1998, this_data$ANOM_ceiling - 3)
+# Earliest year with padron data available
+this_data$ANOM_iv_1998 <- 1998
 
 # Merge in population data by province and country of origin
 # Convert population data from wide to long
 padron_province_data <- read.xlsx(padron_province.dir, sheet = 3, startRow = 8, cols = c(2:29)) %>% melt() %>% dplyr::rename(year = variable, eth_dens_prov = value)
 this_data$sex <- mapvalues(this_data$SEXO, from = c(1, 2), to = c("Male", "Female"))
-this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "pop_percent")], by.x = c("province", "country", "sex", "ANOM_ceiling"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ANOM_iv"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
+this_data <- this_data %>% dplyr::rename(eth_dens_prov_iv = eth_dens_prov)
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ANOM_iv_1998"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
+this_data <- this_data %>% dplyr::rename(eth_dens_prov_iv_1998 = eth_dens_prov)
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ANOM_ceiling"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
 
 #### Indicators of social ties after arriving in Spain
 this_data$LLCONT <- mapvalues(this_data$LLCONT, from = c(1, 6), to = c(1, 0))
@@ -418,7 +434,7 @@ form_data <- this_data %>% dplyr::select(c("IDQ", grep("FORM", colnames(this_dat
   mutate(all_forms_any_friends = ifelse(grepl("FORM04", all_forms), "FORM04", all_forms))
 
 ############################ Set and specify final processed variables ##########################
-study_data <- this_data %>% mutate(#### COVARIATES ####
+this_data <- this_data %>% mutate(#### COVARIATES ####
                                     # Year of arrival in Spain
                                     arrival_spain = ALLE,
                                     # How many complete years in Spain
@@ -434,13 +450,15 @@ study_data <- this_data %>% mutate(#### COVARIATES ####
                                     # Highest level of studies achieved
                                     education = education,
                                     # If he/she has Spanish residence (automatic "yes" if country of origin is an EU member)
-                                    work_permit = ifelse((DOCUM %in% c(1, 2, 3) | country_class == "Yes"), 1, ifelse(is.na(DOCUM) & is.na(country_class), NA, 0)),
+                                    work_permit = ifelse((DOCUM %in% c(1, 2, 3) | country_eu == "Yes"), "Yes", ifelse(is.na(DOCUM) & is.na(country_eu), NA, "No")),
                                     # If he/she Spanish nationality
                                     spanish_nat = mapvalues(this_data$NESP, from = c(1, 6), to = c(1, 0)),
                                     # Country of origin
                                     country = country,
                                     # Country of origin (shortened for plotting and labelling purposes)
                                     country_short = country_short,
+                                    # Country of origin classification
+                                    country_class = country_class,
                                     # Current province of residence
                                     province = province,
                                     # Current comunidad autónoma of residence
@@ -520,9 +538,10 @@ study_data <- this_data %>% mutate(#### COVARIATES ####
                                     eth_dens_prov = eth_dens_prov,
                                     log_eth_dens_prov = log(eth_dens_prov),
                                     eth_dens_prov_sq = eth_dens_prov^2,
-                                    eth_dens_prov_2006 = `2006`,
-                                    log_eth_dens_prov_2006 = log(`2006`),
-                                    eth_dens_prov_2006_sq = `2006`^2,
+                                    eth_dens_prov_iv = eth_dens_prov_iv,
+                                    log_eth_dens_prov_iv = log(eth_dens_prov_iv),
+                                    eth_dens_prov_iv_1998 = eth_dens_prov_iv_1998,
+                                    log_eth_dens_prov_iv_1998 = log(eth_dens_prov_iv_1998),
                                     # If decision to immigrate was influenced by someone from home country who had already immigrated to Spain
                                     influenced = mapvalues(this_data$INFLU, from = c(1, 6), to = c(1, 0)),
                                     # If still working at the same job as when he/she first arrived in Spain
@@ -555,23 +574,23 @@ study_data <- this_data %>% mutate(#### COVARIATES ####
 
 
 # Subset to the processed variables of interest
-study_data_subset <- study_data %>% dplyr::select(IDQ, NPERS, arrival_spain, arrival_mun, years, age, age_arrival, 
-                                                  age_sq, sex, education, work_permit, spanish_nat, country, country_short,
+this_data_subset <- this_data %>% dplyr::select(IDQ, NPERS, arrival_spain, arrival_mun, years, age, age_arrival, 
+                                                  age_sq, sex, education, work_permit, spanish_nat, country, country_short, country_class,
                                                   province, comunidad, occupation1, occupation2, occupation3,sector1, sector2, sector3, 
                                                   situation1, situation2, situation3, municipality, 
                                                   num_siblings, economic, was_working, had_worked, part_time, month_earn, log_month_earn,
                                                   month_hours, hour_earn, log_hour_earn, lt_search_1mo, lt_search, remittance,
-                                                  eth_dens_prov_2006, eth_dens_prov, log_eth_dens_prov, eth_dens_prov_sq, influenced,
+                                                  eth_dens_prov, log_eth_dens_prov, eth_dens_prov_sq, influenced,
                                                   first_job_still, insecurity, precontract, form, networked,
                                                   support_index, any_support, housing_connect, participation_index, participation_indicator,
                                                   num_siblings, reference_person, motive_var_prefixes, all_of(final_vars))
 
 ######################### Save processed data frames ##############################
-saveRDS(study_data, file = paste0(output.dir, "/datos_eni_07_processed.rds"))
-saveRDS(study_data_subset, file = paste0(output.dir, "/datos_eni_07_processed_subset.rds"))
+saveRDS(this_data, file = paste0(output.dir, "/datos_eni_07_processed.rds"))
+saveRDS(this_data_subset, file = paste0(output.dir, "/datos_eni_07_processed_subset.rds"))
 
 ######################### Free up memory #########################################
-rm(workBook, varNames, positions, codebook, all_data, this_data, form_data, country_codebook, language_codebook, comunidad_codebook, 
+rm(workBook, varNames, positions, codebook, all_data, form_data, country_codebook, language_codebook, comunidad_codebook, 
    occupation_codebook, province_codebook, situ_codebook, sector_codebook, educ_codebook, hash_comunidad, hash_countries, hash_countries_short, 
-   hash_country_class, hash_country_spanish, hash_language, hash_occupation, hash_provinces, hash_situ, hash_sector, hash_educ, 
+   hash_country_eu, hash_country_spanish, hash_language, hash_occupation, hash_provinces, hash_situ, hash_sector, hash_educ, 
    padron_province_data, muv_data, anom_data,motive_data, motive_var_prefixes)
