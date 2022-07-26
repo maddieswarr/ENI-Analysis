@@ -57,8 +57,6 @@ get_packages(c("XLConnect", "openxlsx", "plyr", "tidyverse", "reshape2", "utile.
 data_micro <- "datos_eni_07.txt"
 data_meta  <- "disreg_eni07.xls"
 data_ppr <- "poblacion_provincia_serie_temporal_por_sexo.xlsx"
-# Google Cloud key for access to Translate
-key_GoogleTranslate <- "medeg-thesis-translator-d96fe6bca7c2.json"
 
 # Specify other directories
 input.dir <- paste0(head.dir, "/Data")
@@ -383,7 +381,7 @@ this_data$ANOM_floor <- ifelse(!is.na(this_data$ANOM), this_data$ANOM,
                                ifelse(this_data$CBVIV == 6 | this_data$PRVIV == 1, this_data$ALLE, NA))
 # If start of residence/contract year was before 1998, set value to 1998 (since we do not have padron data prior to this)
 this_data$ANOM_ceiling <- ifelse(this_data$ANOM_floor < 1998, 1998, this_data$ANOM_floor)
-# Need to instrument with the corresponding measure from five years before the year of arrival to ensure enough temporal space for independence of the settlement 
+# Need to instrument with the corresponding measure from three years before the year of arrival to ensure enough temporal space for independence of the settlement 
 # decision from the instrument. Since registry data by country of origin are available from 1998 onwards, the population will have to be restricted to those immigrants 
 # who arrived in 2002 or later
 this_data$ANOM_iv <- ifelse(this_data$ANOM_ceiling - 3 < 1998, 1998, this_data$ANOM_ceiling - 3)
