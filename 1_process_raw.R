@@ -33,7 +33,7 @@ options(java.parameters = "-Xmx4g" )
 
 ########### PARAMETERS AND SWITCHES #########
 # Run date, for archiving purposes
-run_date <- "11jul2022"
+run_date <- "01aug2022"
 # Do you need to read in the raw data?
 readin.raw <- 0
 # Do you want to housemate demographic information like gender, age, nationality? WARNING: Long processing step
@@ -47,7 +47,6 @@ get_spanish_ability <- 1
 # Specify directories
 head.dir <- "/Users/papapeach/Documents/UC3M/Thesis/Data Analysis/ENI-Analysis"
 dependency.dir <- paste0(head.dir, "/dependencies")
-key.dir <- paste0(head.dir, "/keys")
 # Source dependencies
 source(paste0(dependency.dir, "/get_packages.R"))
 # Download and load necessary packages/libraries
@@ -57,11 +56,13 @@ get_packages(c("XLConnect", "openxlsx", "plyr", "tidyverse", "reshape2", "utile.
 data_micro <- "datos_eni_07.txt"
 data_meta  <- "disreg_eni07.xls"
 data_ppr <- "poblacion_provincia_serie_temporal_por_sexo.xlsx"
+data_paro <- "tasa_paro_por_sexo_1996_2007.xlsx"
 
 # Specify other directories
-input.dir <- paste0(head.dir, "/Data")
+input.dir <- paste0(head.dir, "/data")
 codebook.dir <- paste0(input.dir, "/", data_meta)
 padron_province.dir <- paste0(input.dir, "/", data_ppr)
+tasa_paro.dir <- paste0(input.dir, "/", data_paro)
 output.dir <- paste0(head.dir, "/output/", run_date, "/1_processed")
 # Create output directory
 if (!dir.exists(output.dir)){
@@ -117,14 +118,13 @@ names(this_data) <- codebook[,1][which(keepVars == "Yes")]
 comment(this_data) <- varDescr[which(keepVars == "Yes")]
 # Initiate vector of column names to keep in final processed study dataset
 final_vars <- c()
-# Initiate vector of object names to clear from memory at end of script
-delete_objects <- c()
 
 ###  Since each row in the data represents a household, we must identify and extract the household member of reference ####
 this_data <- this_data %>% mutate(EDAD = NA,
                                   SEXO = NA,
                                   PNAC = NA,
                                   ALLE = NA,
+                                  MLLE = NA,
                                   ANAC = NA,
                                   NESP = NA,
                                   motive_var_prefixes = NA
@@ -140,6 +140,7 @@ for (n in levels(factor(this_data$NPELEG))){
   this_data$SEXO[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$SEXO", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
   this_data$PNAC[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$PNAC", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
   this_data$ALLE[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$ALLE", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
+  this_data$MLLE[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$MLLE", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
   this_data$ANAC[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$ANAC", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
   this_data$NESP[which(this_data$NPELEG == n)] <- eval(parse(text = paste0("this_data$NESP", str_pad(n, 2, pad = "0"))))[which(this_data$NPELEG == n)]
 }
@@ -195,6 +196,7 @@ this_data <- this_data %>% mutate(EDAD = na_if(EDAD, 999),
                                   HORAS2 = na_if(HORAS2, 999),
                                   RECANT = na_if(RECANT, 99999),
                                   ALLE = na_if(ALLE, 0),
+                                  MLLE = na_if(MLLE, 0),
                                   ANAC = na_if(ANAC, 0),
                                   LMAT = na_if(LMAT, 0),
                                   OCUP1 = ifelse(str_trim(CIOCUP1) == "", NA, str_trim(CIOCUP1)),
@@ -365,11 +367,35 @@ if (get_spanish_ability == 1) {
 }
 
 ################## Processing of potential explanatory variables ###########################
+##### Process location-based information
+# Collect data that indicates provinces lived in/currently living in
+prv_data <- this_data %>% dplyr::select(varNames[grepl("PRV", varNames)]) %>%
+  mutate_all(trimws) %>%
+  mutate_all(na_if, "") %>%
+  dplyr::select(-PRVIV)
+# Indicate if he/she has ever lived in a different province during his/her time in Spain
+prv_data$moved_province <- ifelse(apply(prv_data, 1, function(x) length(unique(x[!is.na(x)])) <= 1) == T, 0, 1)
+
 # Collect data that indicates municipalities lived in/currently living in
-muv_data <- this_data %>% dplyr::select(varNames[grepl("MUV_", varNames)]) %>%
+mun_data <- this_data %>% dplyr::select(varNames[grepl("MUV_", varNames)]) %>%
   mutate_all(trimws) %>%
   mutate_all(na_if, "")
-muv_data$MUV <- muv_data[cbind(1:nrow(muv_data), max.col(!is.na(muv_data), ties.method = 'last'))]
+# Indicate if he/she has ever lived in a different municipality during his/her time in Spain
+mun_data$moved_mun <- ifelse(apply(mun_data, 1, function(x) length(unique(x[!is.na(x)])) <= 1) == T, 0, 1)
+
+# Collect data that indicates population stratification of municipalities lived in/currently living in
+muv_data <- this_data %>% dplyr::select(varNames[grepl("MUV\\d\\d", varNames)]) %>%
+  mutate_all(trimws) %>%
+  mutate_all(na_if, "")
+
+# Create hash of municipalities and estrato de población to merge missing population information onto municipality of residence
+muv_codebook <- cbind(mun_data$MUV_01, muv_data$MUV01) %>% as.data.frame() %>%
+  dplyr::rename(muv = V1, estrato = V2) %>% 
+  filter(!is.na(muv) & muv != "No Sabe")
+hash_muv <- hash()
+.set(hash_muv, keys = muv_codebook$muv, values = muv_codebook$estrato)
+this_data$mun_estrato[which((trimws(this_data$MUV) %in% muv_codebook$muv))] <- hash::values(hash_muv, keys = trimws(this_data$MUV[which((trimws(this_data$MUV) %in% muv_codebook$muv))]))
+clear(hash_muv)
 
 # Collect data that indicates how long was lived/currently living in each municipality
 anom_data <- this_data %>% dplyr::select(starts_with("ANOM")) %>%
@@ -397,6 +423,9 @@ this_data <- this_data %>% dplyr::rename(eth_dens_prov_iv = eth_dens_prov)
 this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ANOM_iv_1998"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
 this_data <- this_data %>% dplyr::rename(eth_dens_prov_iv_1998 = eth_dens_prov)
 this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ANOM_ceiling"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
+this_data <- this_data %>% dplyr::rename(eth_dens_prov_1 = eth_dens_prov)
+this_data <- merge(x = this_data, y = padron_province_data[, c("Destination", "Origin", "SEXO", "year", "eth_dens_prov")], by.x = c("province", "country", "sex", "ALLE"), by.y = c("Destination", "Origin", "SEXO", "year"), all.x = TRUE)
+this_data <- this_data %>% dplyr::rename(eth_dens_prov_2 = eth_dens_prov)
 
 #### Indicators of social ties after arriving in Spain
 this_data$LLCONT <- mapvalues(this_data$LLCONT, from = c(1, 6), to = c(1, 0))
@@ -434,7 +463,13 @@ form_data <- this_data %>% dplyr::select(c("IDQ", grep("FORM", colnames(this_dat
 ############################ Set and specify final processed variables ##########################
 this_data <- this_data %>% mutate(#### COVARIATES ####
                                     # Year of arrival in Spain
-                                    arrival_spain = ALLE,
+                                    arrival_spain_yr = ALLE,
+                                    # Month of arrival in Spain
+                                    arrival_spain_mo = MLLE,
+                                    # Quarter of arrival in Spain
+                                    arrival_spain_qt = ifelse(MLLE %in% c(1:3), "T1", ifelse(MLLE %in% c(4:6), "T2", ifelse(MLLE %in% c(7:9), "T3", ifelse(MLLE %in% c(10:12), "T4", "")))),
+                                    # Date of arrival in Spain
+                                    arrival_spain_dt = paste0(ALLE, arrival_spain_qt),
                                     # How many complete years in Spain
                                     years = ifelse((2006 - ALLE) > 0, 2006 - ALLE, 0),
                                     # Age
@@ -459,10 +494,16 @@ this_data <- this_data %>% mutate(#### COVARIATES ####
                                     country_class = country_class,
                                     # Current province of residence
                                     province = province,
+                                    # If he/she has ever moved provinces in Spain
+                                    has_moved_province = prv_data$moved_province,
+                                    # If he/she has ever moved municipalities in Spain
+                                    has_moved_mun = mun_data$moved_mun,
                                     # Current comunidad autónoma of residence
                                     comunidad = comunidad,
                                     # Current municipality of residence
-                                    municipality = muv_data$MUV,
+                                    municipality = trimws(MUV),
+                                    # Current municipality of residence population strata
+                                    mun_strata = mun_estrato,
                                     # What year did he/she start living in this municipality
                                     arrival_mun = ANOM,
                                     # Last occupation in country of departure
@@ -533,9 +574,12 @@ this_data <- this_data %>% mutate(#### COVARIATES ####
                                     remittance = RECANT,
                                    
                                     #### SOCIAL VARS ####
-                                    eth_dens_prov = eth_dens_prov,
-                                    log_eth_dens_prov = log(eth_dens_prov),
-                                    eth_dens_prov_sq = eth_dens_prov^2,
+                                    eth_dens_prov_1 = eth_dens_prov_1,
+                                    eth_dens_prov_2 = eth_dens_prov_2,
+                                    log_eth_dens_prov_1 = log(eth_dens_prov_1),
+                                    log_eth_dens_prov_2 = log(eth_dens_prov_2),
+                                    eth_dens_prov_1_sq = eth_dens_prov_1^2,
+                                    eth_dens_prov_2_sq = eth_dens_prov_2^2,
                                     eth_dens_prov_iv = eth_dens_prov_iv,
                                     log_eth_dens_prov_iv = log(eth_dens_prov_iv),
                                     eth_dens_prov_iv_1998 = eth_dens_prov_iv_1998,
@@ -570,25 +614,44 @@ this_data <- this_data %>% mutate(#### COVARIATES ####
                                     reference_person = NPELEG
 )
 
+####### Merge in unemployment data by province and year of arrival
+# Read in unemployment data by province and quarter
+tasa_paro_data_qt <- read.xlsx(tasa_paro.dir, sheet = 1, startRow = 7, cols = c(2:52)) %>% melt(id.vars = c("Province", "Destination_mapSpain", "Sex")) %>% 
+  dplyr::rename(year_qt = variable, tasa_paro = value) %>%
+  mutate(tasa_paro = as.numeric(tasa_paro))
+# Calculate average unemployment rate by year
+tasa_paro_data_yr <- tasa_paro_data_qt %>% 
+  mutate(year = substr(year_qt, 1, 4)) %>% 
+  group_by(Province, Destination_mapSpain, Sex, year) %>%
+  summarise(across(c("tasa_paro"), ~ mean(.x, na.rm = TRUE))) %>% ungroup() %>%
+  dplyr::rename(year_qt = year)
+# Merge quarterly and yearly unemployment rates
+tasa_paro_data <- rbind(tasa_paro_data_qt, tasa_paro_data_yr)
+# Merge in unemployment rates by province and quarter of arrival.
+# For those who did not report the quarter in which they arrived to Spain, 
+this_data <- merge(x = this_data, y = tasa_paro_data[, c("Province", "Sex", "year_qt", "tasa_paro")], by.x = c("province", "sex", "arrival_spain_dt"), by.y = c("Province", "Sex", "year_qt"), all.x = TRUE)
 
 # Subset to the processed variables of interest
-this_data_subset <- this_data %>% dplyr::select(IDQ, NPERS, arrival_spain, arrival_mun, years, age, age_arrival, 
+this_data_subset <- this_data %>% dplyr::select(IDQ, NPERS, arrival_spain_yr, arrival_spain_mo, arrival_spain_dt, arrival_spain_qt, arrival_mun, years, age, age_arrival, 
                                                   age_sq, sex, education, work_permit, spanish_nat, country, country_short, country_class,
                                                   province, comunidad, occupation1, occupation2, occupation3,sector1, sector2, sector3, 
-                                                  situation1, situation2, situation3, municipality, 
+                                                  situation1, situation2, situation3, municipality, mun_strata,
                                                   num_siblings, economic, was_working, had_worked, part_time, month_earn, log_month_earn,
                                                   month_hours, hour_earn, log_hour_earn, lt_search_1mo, lt_search, remittance,
-                                                  eth_dens_prov, log_eth_dens_prov, eth_dens_prov_sq, influenced,
-                                                  first_job_still, insecurity, precontract, form, networked,
+                                                  eth_dens_prov_1, eth_dens_prov_2, log_eth_dens_prov_1, log_eth_dens_prov_2, eth_dens_prov_1_sq, eth_dens_prov_2_sq,
+                                                  influenced, first_job_still, insecurity, precontract, form, networked,
                                                   support_index, any_support, housing_connect, participation_index, participation_indicator,
-                                                  num_siblings, reference_person, motive_var_prefixes, all_of(final_vars))
+                                                  num_siblings, reference_person, motive_var_prefixes, all_of(final_vars), has_moved_province, has_moved_mun, tasa_paro)
 
 ######################### Save processed data frames ##############################
 saveRDS(this_data, file = paste0(output.dir, "/datos_eni_07_processed.rds"))
 saveRDS(this_data_subset, file = paste0(output.dir, "/datos_eni_07_processed_subset.rds"))
 
 ######################### Free up memory #########################################
-rm(workBook, varNames, positions, codebook, all_data, form_data, country_codebook, language_codebook, comunidad_codebook, 
+rm(workBook, varNames, positions, codebook, all_data, form_data, country_codebook, language_codebook, comunidad_codebook, muv_codebook,
    occupation_codebook, province_codebook, situ_codebook, sector_codebook, educ_codebook, hash_comunidad, hash_countries, hash_countries_short, 
-   hash_country_eu, hash_country_spanish, hash_language, hash_occupation, hash_provinces, hash_situ, hash_sector, hash_educ, 
-   padron_province_data, muv_data, anom_data,motive_data, motive_var_prefixes)
+   hash_country_eu, hash_country_spanish, hash_country_class, hash_language, hash_occupation, hash_provinces, hash_situ, hash_sector, hash_educ, hash_muv, 
+   padron_province_data, prv_data, mun_data, muv_data, anom_data, motive_data, motive_var_prefixes, tasa_paro_data_qt, tasa_paro_data_yr, tasa_paro_data,
+   this_point, this_row, col, data_meta, data_micro, data_paro, data_ppr, get_housemate_demographics, readin.raw, get_sibling_residence_info, get_spanish_ability,
+   head.dir, dependency.dir, input.dir, output.dir, padron_province.dir, codebook.dir, tasa_paro.dir, i, idio, keepVars, varDescr, m, n, row, this_col, motive_var_prefixes, motive_var_prefix, 
+   run_date, final_vars)
