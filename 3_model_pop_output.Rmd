@@ -12,261 +12,73 @@ classoption: landscape
 
 ```{r echo = FALSE, warning = FALSE, message = FALSE}
 ########### ESPECIFICAMOS EL DIRECTORIO DEL CODIGO ################
-head.dir <- "/Volumes/GoogleDrive/My Drive/Thesis/Data Analysis/ENI_ANALYSIS"
-run_date <- "26abril2022"
+head.dir <- "/Users/papapeach/Documents/UC3M/Thesis/Data Analysis/ENI-Analysis"
+run_date <- "06jul2022"
 
 # Descargar libraries 
-dependency.dir <- paste0(head.dir, "/Pipeline/dependencies")
+dependency.dir <- paste0(head.dir, "/dependencies")
 source(paste0(dependency.dir, "/get_packages.R"))
-get_packages(c("MASS", "foreign", "Hmisc", "reshape2", "dplyr", "stargazer"))
+get_packages(c("MASS", "foreign", "Hmisc", "reshape2", "dplyr", "stargazer", "hypr", "sjPlot", "sjmisc"))
 
 ####################    Asignacion de parametros    #######################
 # Recogemos la ruta del script que se esta ejecutando
-input.dir <- paste0(head.dir, "/Output/", run_date, "/1_processed")
-output.dir <- paste0(head.dir, "/Output/", run_date, "/3_modelled")
+input.dir <- paste0(head.dir, "/output/", run_date, "/1_processed")
+output.dir <- paste0(head.dir, "/output/", run_date, "/3_modelled")
 if (!dir.exists(output.dir)) {
   dir.create(output.dir)
 }
 
-this_data_subset <- readRDS(paste0(input.dir, "/datos_eni_07_processed_subset.rds"))
-this_data_subset$spanish <- factor(this_data_subset$spanish, levels = c("Necesita mejorar", "Suficiente", "Bien", "Nativo"))
-this_data_subset$sex <- factor(this_data_subset$sex, levels = c("Male", "Female"))
+this_data <- readRDS(paste0(input.dir, "/datos_eni_07_processed.rds"))
+this_data$spanish <- factor(this_data$spanish, levels = c("Necesita mejorar", "Suficiente", "Bien", "Nativo")) %>% as.factor()
+this_data$sex <- factor(this_data$sex, levels = c("Male", "Female")) %>% as.factor()
+this_data$education <- factor(this_data$education, levels = c("Alguno/no sabe", "Sin estudios", "Primaria (incompleto)", "Primaria (completo)", "Secudaria (primer ciclo)", "Secudaria (segundo ciclo)", "Terciaria (primer ciclo)", "Terciaria (segundo ciclo)")) %>% as.factor()
+this_data$sector2 <- factor(this_data$sector2, levels = c("Agriculture", "Business, commerce", "Construction", "Education", "Energy", "Extractive industries", "Extraterritorial organizations", "Financial intermediation", "Fishing", "Health and social services", "Hospitality", "Household activities", "Manufacturing", "Other social, community, personal services", "Public administration, defense", "Real estate; rental, business services", "Transportation, communications")) %>% as.factor()
+this_data$work_permit <- factor(this_data$work_permit, levels = c("Yes", "No"))
 
-####################### Restrict to primary study population ##########################
-this_pop <- this_data_subset %>% dplyr::filter(economic == 1 & arrival_year >= 1998)
+contrasts(this_data$sector2, 16) <- centered_contrasts(hypr(contrasts(this_data$sector2)))
 ```
 
-
+## Estimated hourly earnings
 ```{r echo = FALSE, warning = FALSE, message = FALSE}
 ######### 1b. Effect of concentration of coethnics in same province on estimated hourly earnings
-this_pop_1b <- this_pop %>% filter(!is.na(log_hour_earn) & !is.na(eth_dens_prov))
-model_1bi <- lm(log_hour_earn ~ eth_dens_prov, data = this_pop_1b)
-#+ country_short + years + age + age_sq + sex + education + spanish + comunidad + occupation1 + work_permit
+this_data_2 <- this_data %>% filter(!is.na(log_hour_earn) & !is.na(log_eth_dens_prov) & !is.infinite(log_eth_dens_prov) & part_time == 0)
 
-model_1bii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq, data = this_pop_1b)
-#+ country_short + years + age + age_sq + sex + education + spanish + comunidad + occupation1 + work_permit
+model_data_2i <- lm(log_hour_earn ~ log_eth_dens_prov, data = this_data_2)
 
-model_1biii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish, data = this_pop_1b)
+model_data_2ii <- lm(log_hour_earn ~ log_eth_dens_prov + years + education, data = this_data_2)
 
-model_1biv <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit, data = this_pop_1b)
+model_data_2iii <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq, data = this_data_2)
 
-model_1bv <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit + age + age_sq + sex, data = this_pop_1b)
+model_data_2iv <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex, data = this_data_2)
 
-model_1bvi <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit + age + age_sq + sex + country_short, data = this_pop_1b)
+model_data_2v <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit, data = this_data_2)
 
-model_1bvii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality, data = this_pop_1b)
+model_data_2vi <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2, data = this_data_2)
 
-model_1bviii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1, data = this_pop_1b)
+model_data_2vii <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short, data = this_data_2)
 
-model_1bix <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1 + occupation1, data = this_pop_1b)
+model_data_2viii <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province, data = this_data_2)
+
+model_data_2ix <- lm(log_hour_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province + sector2*log_eth_dens_prov, data = this_data_2)
+
+anova(model_data_2viii, model_data_2ix)
+
+plot_model(model_data_2ix, type = "pred", terms = c("sector2", "log_eth_dens_prov")) + theme(axis.text.x = element_text(angle = 60))
 ```
 
 ```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
-
-stargazer(model_1bi, model_1bii, model_1biii, model_1biv, model_1bv, model_1bvi, model_1bvii,
-          type="latex",
-          title = "Effect of concentration of coethnics in same province on log of estimated hourly earnings",
-          colnames = FALSE,
-          dep.var.labels = "Log of estimated hourly earnings",
-          dep.var.labels.include = T,
-          covariate.labels = c("Co-ethnic concentration", "Co-ethnic concentration squared", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female"),
-          keep = ,
-          omit = c("country_short", "municipality"),
-          add.lines=list(c('Country of origin controls', rep("No", 5), "Yes", "Yes"),
-                         c('Municipality controls', rep("No", 6), "Yes")),
-          column.sep.width = "1pt",
-          header=FALSE,
-          no.space = TRUE,
-          digits = 3,
-          df = FALSE,
-          single.row = T,
-          font.size = "footnotesize",
-          notes.align = "c",
-          keep.stat = c("n", "rsq", "f", "ser"),
-          table.placement = "H")
-```
-
-## Table 1
-
-### Observations
-1. There is a significant negative effect of co-ethnic concentration in models (1) through (6) at $\alpha \le 0.05$). The models provide better fit when the effect is modeled as quadratic, and the coefficients indicate a convex effect. However, this effect becomes 0 and insignificant when controlling for country of origin in model (6). Additional controls for municipality in model (7) give a positive, concave yet insignificant effect of co-ethnic concentration on the log of hourly earnings. This could be due to the fact that certain municipalities dominated by certain sectors where wages tend to be lower experience higher concentration of co-ethnics, and higher concentration of co-ethnics in these municipalities in turn drives wages further down, so we cannot identify the temporality/directionality of this relationship.
-
-### Issues  
-1. There's not much variation in country of origin for high co-ethnic concentration levels (multicollinearity). Alternatively put, the most highly "ethnic" provinces are represented mainly by a few of the largest sending countries (Romania, Morocco, Ecuador). Thus, we don't know if we are controlling for country of origin or co-ethnic density, which are measured at different levels. 
-
-2. When we control for country of origin in model (6) is when the effects of Spanish ability start to make sense, since Spanish ability and country of origin are correlated. Being a native speaker can be almost perfectly predicted from country of origin, so thus the negative effect of being a native speaker seen in models (3), (4), and (5) represents more accurately country of origin.
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width=10,fig.height=7}
-## Which countries are most represented?
-countries <- table(this_pop$country) %>% as.data.frame(responseName = "Freq") %>% dplyr::rename(country = Var1) %>%
-  arrange(desc(Freq))
-these_top_countries <- countries %>% filter(Freq > 110)
-this_pop <- this_pop %>% mutate(country_class = ifelse(country %in% these_top_countries$country, country, "Other"))
-order_countries <- these_top_countries$country[these_top_countries$country %in% levels(factor(this_pop$country))] %>% as.vector()
-
-
-ggplot(this_pop, aes(x=eth_dens_prov, y = log_hour_earn)) +
-  geom_smooth(aes(x=eth_dens_prov, y = log_hour_earn), color = "black") +
-  geom_point(aes(color=country_class)) + 
-  geom_smooth(aes(color=country_class)) +
-  scale_color_brewer(palette="Paired") + 
-    labs(title = "Log of estimated hourly earnings on co-ethnic density \n Top-represented countries",
-       x = "Co-ethnic density (province-level)",
-       y = "Log of estimated hourly earnings") 
-```
-
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, fig.width=10,fig.height=7}
-ggplot(this_pop, aes(x=eth_dens_prov, fill=country_class)) +
-  geom_histogram(bins = 52) + 
-  scale_fill_brewer(palette="Paired") + 
-    labs(title = "Counts of immigrants by co-ethnic density \n Top-represented countries",
-       x = "Co-ethnic density (province-level)")
-```
-
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, eval = F}
-######### 2b. Effect of number of siblings living in same province on estimated hourly earnings
-this_pop_2b <- this_pop %>% filter(!is.na(log_hour_earn))
-
-model_2bi <- lm(log_hour_earn ~ HH_same_prov, data = this_pop_2b)
-
-#model_2bi <- lm(log_hour_earn ~ HH_same_prov + HH_same_prov_sq, data = this_pop_2b)
-#+ country_short + years + age + age_sq + sex + education + spanish + comunidad + occupation1 + work_permit
-
-model_2bii <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish, data = this_pop_2b)
-
-model_2biii <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit, data = this_pop_2b)
-
-model_2biv <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex, data = this_pop_2b)
-
-model_2bv <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short, data = this_pop_2b)
-
-model_2bvi <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality, data = this_pop_2b)
-
-model_2bvii <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1, data = this_pop_2b)
-
-model_2bviii <- lm(log_hour_earn ~ HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1 + occupation1, data = this_pop_2b)
-
-```
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', eval = F}
-stargazer(model_2bi, model_2bii, model_2biii, model_2biv, model_2bv, model_2bvi,
-          type="latex",
-          title = "Effect of siblings living in same province but not in same household on log of estimated hourly earnings",
-          colnames = FALSE,
-          dep.var.labels = "Log of estimated hourly earnings",
-          dep.var.labels.include = T,
-          covariate.labels = c("Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female"),
-          keep = ,
-          omit = c("country_short", "municipality"),
-          add.lines=list(c('Country of origin controls', rep("No", 4), "Yes", "Yes"),
-                         c('Municipality controls', rep("No", 5), "Yes")),
-          column.sep.width = "1pt",
-          header=FALSE,
-          no.space = TRUE,
-          digits = 3,
-          df = FALSE,
-          single.row = T,
-          font.size = "footnotesize",
-          notes.align = "c",
-          keep.stat = c("n", "rsq", "f", "ser"),
-          table.placement = "H")
-```
-
-
-```{r echo = FALSE, warning = FALSE, message = FALSE}
-######### 3b. Effect of concentration of coethnics and siblings living in same province on estimated hourly earnings
-this_pop_3b <- this_pop %>% filter(!is.na(log_hour_earn) & !is.na(eth_dens_prov))
-
-model_3bi <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov, data = this_pop_3b)
-#+ country_short + years + age + age_sq + sex + education + spanish + comunidad + occupation1 + work_permit
-
-model_3bii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov+ years + education + spanish, data = this_pop_3b)
-
-model_3biii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit, data = this_pop_3b)
-
-model_3biv <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex, data = this_pop_3b)
-
-model_3bv <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short, data = this_pop_3b)
-
-model_3bvi <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality, data = this_pop_3b)
-
-model_3bvii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1, data = this_pop_3b)
-
-model_3bviii <- lm(log_hour_earn ~ eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + country_short + municipality + sector1 + occupation1, data = this_pop_3b)
-```
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
-stargazer(model_3bi, model_3bii, model_3biii, model_3biv, model_3bv, model_3bvi,
-          type="latex",
-          title = "Effect of concentration of coethnics and siblings living in same province on log of estimated hourly earnings",
-          colnames = FALSE,
-          dep.var.labels = "Log of estimated hourly earnings",
-          dep.var.labels.include = T,
-          covariate.labels = c("Co-ethnic concentration", "Co-ethnic concentration squared", "Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female"),
-          keep = ,
-          omit = c("country_short", "municipality"),
-          add.lines=list(c('Country of origin controls', rep("No", 4), "Yes", "Yes"),
-                         c('Municipality controls', rep("No", 5), "Yes")),
-          column.sep.width = "1pt",
-          header=FALSE,
-          no.space = TRUE,
-          digits = 3,
-          df = FALSE,
-          single.row = T,
-          font.size = "footnotesize",
-          notes.align = "c",
-          keep.stat = c("n", "rsq", "f", "ser"),
-          table.placement = "H")
-```
-
-## Table 2
-
-### Observations
-We observe a pretty consistent, slightly negative or zero-magntude and insignificant effect of the number of siblings one has living in the same province but not in the same household.  Individuals from certain countries of origin who earn less money per hour (negative effect) possess more "social capital" as measured by the number of siblings living in the same province, and when country of origin is controlled for we see this negative effect be removed when we move from model (4) to model (5). Certain municipalities with greater earnings per hour (most likely the urban ones, though I currently can't tell since I cannot link the municipality names to their codings) also have more siblings living in the same province as would make sense in the urban setting. When municipality is controlled for, we see this positive effect removed from the siblings variable as we move from model (5) to model (6).
-
-### Issues
-Number of siblings one has living in the same province is a very rudimentary and non-informative measure of social networks. There's not much variation and there is a lot of other factors affecting this measure that can also be related to wages. The idea of counting siblings *not living in the same household* was to try and address this potential endogeneity, as we could imagine that siblings in the household doesn't measure social networks but, say, more mouths to feed or greater sharing of financial resources within the household. Or perhaps less wages thus creates a greater need to live together and share resources. However, this does not avoid the fact that perhaps by doing particularly well economically, an individual spreads the word of his success to his family members or can then help pay the trip of a relative, prompting more to immigrate and thus an increase in number of siblings living in the same province. Perhaps one way to deal with this could be to look at “initial” social capital (how many family members or social support was accessed upon arrival) and restrict to those who didn’t have any pre-contract set up before arriving.
-
-```{r echo = FALSE, warning = FALSE, message = FALSE}
-######### 4b. Effect of concentration of coethnics in same province on estimated hourly earnings
-this_pop_4b <- this_pop %>% filter(!is.na(log_hour_earn) & !is.na(participation_indicator) & spanish_nat == 0)
-model_4bi <- lm(log_hour_earn ~ participation_indicator, data = this_pop_4b)
-#+ country_short + years + age + age_sq + sex + education + spanish + comunidad + occupation1 + work_permit
-
-model_4bii <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov, data = this_pop_4b)
-
-model_4biii <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish, data = this_pop_4b)
-
-model_4biv <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit, data = this_pop_4b)
-
-model_4bv <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex, data = this_pop_4b)
-
-model_4bvi <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + sex*participation_indicator, data = this_pop_4b)
-
-model_4bvii <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + sex*participation_indicator + country_short, data = this_pop_4b)
-
-model_4bviii <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + sex*participation_indicator+ country_short + municipality, data = this_pop_4b)
-
-
-model_4bix <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + sex*participation_indicator + country_short + municipality + sector1, data = this_pop_4b)
-
-model_4bx <- lm(log_hour_earn ~ participation_indicator + eth_dens_prov + eth_dens_prov_sq + HH_same_prov + years + education + spanish + work_permit + age + age_sq + sex + sex*participation_indicator + country_short + municipality + sector1 + occupation1, data = this_pop_4b)
-```
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
-stargazer(model_4bi, model_4bii, model_4biii, model_4biv, model_4bv, model_4bvi, model_4bvii, model_4bviii,
+stargazer(model_data_2i, model_data_2iv, model_data_2v, model_data_2vi, model_data_2vii, model_data_2viii,
           type="latex",
           title = "Effect of civic participation on log of estimated hourly earnings (for those who do not possess Spanish nationality)",
           colnames = FALSE,
           dep.var.labels = "Log of estimated hourly earnings",
           dep.var.labels.include = T,
-          covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
-          keep = ,
-          omit = c("country_short", "municipality"),
-          add.lines=list(c('Country of origin controls', rep("No", 6), rep("Yes", 2)),
-                         c('Municipality controls', rep("No", 7), rep("Yes", 1))),
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "years", "education", "work_permit", "age", "age_sq", "sex"),
+          omit = c("sector2", "country_short", "province"),
+          add.lines=list(c('Sector controls', rep("No", 3), rep("Yes", 3)),
+                         c('Regional controls', rep("No", 4), rep("Yes", 2)),
+                         c('Country of origin controls', rep("No", 5), rep("Yes", 1))),
           column.sep.width = "1pt",
           header=FALSE,
           no.space = TRUE,
@@ -277,35 +89,90 @@ stargazer(model_4bi, model_4bii, model_4biii, model_4biv, model_4bv, model_4bvi,
           notes.align = "c",
           keep.stat = c("n", "rsq", "f", "ser"),
           table.placement = "H")
-```
 
-&nbsp;
-
-## Table 3
-
-### Observations
-In general, we see a positive and significant effect of civic engagement on wages. The high magnitude effect (on the order of a ~10.9% average increase in wages for those who have participated in a local organization or voted in a municipal election versus those who haven't) decreases as we control for more covariates. For example, moving from model (2) to model (3) when control for education and years since arrival are added, we see that the ones who are highly educated and have been in Spain more years are more likely to have participated in a local organization or voted in municipal elections, hence the decrease in the positive effect of civic engagement. When an interaction term is added between civic engagement and gender, we see a significant and large additive effect of civic engagement for women. In model (6) of  Table 4 where controls for country of origin, municipality, sector and occupation of job in home country are added, we see that the average effect of civic engagement for women is an additional ~11.5% of estimated monthly earnings than for a similar man, while the effect of civic engagement for men is now negative (but insignificant). 
-
-### Issues
-With the civic engagement measure, we are not sure the *directionality* of the effect on wages. It could be that someone who is earning more is more likely to then go and participate in these organizations. Perhaps it costs money to join these organizations. It also requires time, which someone might not have much of if they have to work various jobs or are unable to pay other people to do housework/nannying for them (which is often work assigned to women), for example. It could also be a case of *simultaneity*. Perhaps a **structural equation modeling (SEM)** approach could be appropriate here. Finally, it should be investigated whether this civic engagement measure could be measuring other things that aren't related to social capital, per say. One example could be that some of these community organizations are actually helping immigrants validate their education certificates, and thus this assimilation of education obtained in the home country is what is causing the increase in wages.
-
-
-```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
-stargazer(model_1bviii, model_1bix, model_3bvii, model_3bviii, model_4bix, model_4bx,
-          object.names = F,
-          column.labels = c("Table 1 cont.", "Table 1 cont.", "Table 2 cont.", "Table 2 cont.", "Table 3 cont.", "Table 3 cont."),
+stargazer(model_data_2ix,
           type="latex",
-          title = "Effect of concentration of coethnics and siblings living in same province and civic engagement on log of estimated hourly earnings \n Additional controls for sector and occupation in home country",
+          title = "Effect of civic participation on log of estimated hourly earnings (for those who do not possess Spanish nationality)",
           colnames = FALSE,
           dep.var.labels = "Log of estimated hourly earnings",
           dep.var.labels.include = T,
-          covariate.labels = c("Civic engagement", "Co-ethnic concentration", "Co-ethnic concentration squared", "Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
-          keep = ,
-          omit = c("country_short", "municipality", "sector1", "occupation1"),
-          add.lines=list(c('Country of origin controls', rep("Yes", 6)),
-                         c('Municipality controls', rep("Yes", 6)),
-                         c('Sector controls', rep("Yes", 6)),
-                         c('Occupation controls', rep(c("No", "Yes"), 3))),
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "sector2:log_eth_dens_prov"),
+          omit = c("years", "education", "work_permit", "age", "age_sq", "sex", "country_short", "province", "sector2"),
+          add.lines=list(c('Years in Spain control', rep("Yes", 1)),
+                         c('Education level control', rep("Yes", 1)),
+                         c('Work authorization control', rep("Yes", 1)),
+                         c('Age control', rep("Yes", 1)),
+                         c('Age squared control', rep("Yes", 1)),
+                         c('Gender controls', rep("Yes", 1)),
+                         c('Country of origin controls', rep("Yes", 1)),
+                         c('Regional controls', rep("Yes", 1)),
+                         c('Sector controls', rep("Yes", 1))),
+          column.sep.width = "1pt",
+          header=FALSE,
+          no.space = TRUE,
+          digits = 3,
+          df = FALSE,
+          single.row = T,
+          font.size = "tiny",
+          notes.align = "c",
+          keep.stat = c("n", "rsq", "f", "ser"),
+          table.placement = "H")
+```
+
+## Log monthly earnings
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+######### 3. Effect of concentration of coethnics in same province on log monthly income
+this_data_3 <- this_data %>% filter(!is.na(log_month_earn) & !is.na(log_eth_dens_prov) & !is.infinite(log_eth_dens_prov) & part_time == 0)
+
+model_data_3i <- lm(log_month_earn ~ log_eth_dens_prov, data = this_data_3)
+
+model_data_3ii <- lm(log_month_earn ~ log_eth_dens_prov + years + education, data = this_data_3)
+
+model_data_3iii <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq, data = this_data_3)
+
+model_data_3iv <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex, data = this_data_3)
+
+model_data_3v <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit, data = this_data_3)
+
+model_data_3vi <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2, data = this_data_3)
+
+model_data_3vii <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short, data = this_data_3)
+
+model_data_3viii <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province, data = this_data_3)
+
+model_data_3ix <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province + sector2:log_eth_dens_prov, data = this_data_3)
+
+model_data_3x <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province + country_short:log_eth_dens_prov, data = this_data_3)
+
+model_data_3xi <- lm(log_month_earn ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province + work_permit:log_eth_dens_prov, data = this_data_3)
+
+# ANOVA for interaction of eth_dens_prov with sector and marginal effects plot
+anova(model_data_3viii, model_data_3ix)
+plot_model(model_data_3ix, type = "pred", terms = c("sector2", "log_eth_dens_prov")) + theme(axis.text.x = element_text(angle = 60))
+
+# ANOVA for interaction of eth_dens_prov with country of origin and marginal effects plot
+anova(model_data_3viii, model_data_3x)
+plot_model(model_data_3x, type = "pred", terms = c("country_short [Alemania, Argentina, China, Colombia, Italia, Marruecos, Pakistán, Reino Unido, Ecuador, Venezuela, Rumanía, Senegal, Perú, Francia, Cuba]", "log_eth_dens_prov")) + theme(axis.text.x = element_text(angle = 60))
+
+# ANOVA for interaction of eth_dens_prov with work authorization status and marginal effects plot
+anova(model_data_3viii, model_data_3xi)
+plot_model(model_data_3xi, type = "pred", terms = c("log_eth_dens_prov", "work_permit"))
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
+stargazer(model_data_3i, model_data_3iv, model_data_3v, model_data_3vi, model_data_3vii, model_data_3viii,
+          type="latex",
+          title = "Effect of civic participation on log of estimated hourly earnings (for those who do not possess Spanish nationality)",
+          colnames = FALSE,
+          dep.var.labels = "Log of estimated hourly earnings",
+          dep.var.labels.include = T,
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "years", "education", "work_permit", "age", "age_sq", "sex"),
+          omit = c("sector2", "country_short", "province"),
+          add.lines=list(c('Sector controls', rep("No", 3), rep("Yes", 3)),
+                         c('Regional controls', rep("No", 4), rep("Yes", 2)),
+                         c('Country of origin controls', rep("No", 5), rep("Yes", 1))),
           column.sep.width = "1pt",
           header=FALSE,
           no.space = TRUE,
@@ -317,9 +184,114 @@ stargazer(model_1bviii, model_1bix, model_3bvii, model_3bviii, model_4bix, model
           keep.stat = c("n", "rsq", "f", "ser"),
           table.placement = "H")
 
-#"Sector - servicios empresariales", "Sector - servicio social", "Sector - administración pública", "Sector #- agricultura", "Sector - comercio", "Sector - construcción", "Sector - educacción", "Sector - hostelería", #"Sector - manufacturera", "Sector - extractiva", "Sector - financiera", "Sector - #extraterritoriales","Sector - servicios personales", "Sector - pesca", "Sector - energía", "Sector - #transporte",
+stargazer(model_data_3ix,
+          type="latex",
+          title = "Effect of civic participation on log of estimated hourly earnings (for those who do not possess Spanish nationality)",
+          colnames = FALSE,
+          dep.var.labels = "Log of estimated hourly earnings",
+          dep.var.labels.include = T,
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "sector2:log_eth_dens_prov"),
+          omit = c("years", "education", "work_permit", "age", "age_sq", "sex", "country_short", "province", "sector2"),
+          add.lines=list(c('Years in Spain control', rep("Yes", 1)),
+                         c('Education level control', rep("Yes", 1)),
+                         c('Work authorization control', rep("Yes", 1)),
+                         c('Age control', rep("Yes", 1)),
+                         c('Age squared control', rep("Yes", 1)),
+                         c('Gender controls', rep("Yes", 1)),
+                         c('Country of origin controls', rep("Yes", 1)),
+                         c('Regional controls', rep("Yes", 1)),
+                         c('Sector controls', rep("Yes", 1))),
+          column.sep.width = "1pt",
+          header=FALSE,
+          no.space = TRUE,
+          digits = 3,
+          df = FALSE,
+          single.row = T,
+          font.size = "tiny",
+          notes.align = "c",
+          keep.stat = c("n", "rsq", "f", "ser"),
+          table.placement = "H")
 ```
 
+## Job search
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+######### 4. Effect of concentration of coethnics in same province on time it took to find a job
+this_data_4 <- this_data %>% filter(!is.na(TPO1) & precontract == 0 & !is.na(log_eth_dens_prov) & !is.infinite(log_eth_dens_prov))
+
+model_data_4i <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province, data = this_data_4, family = binomial())
+
+model_data_4ii <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education , data = this_data_4, family = binomial())
+
+model_data_4iii <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq, data = this_data_4, family = binomial())
+
+model_data_4iv <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex, data = this_data_4, family = binomial())
+
+model_data_4v <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit, data = this_data_4, family = binomial())
+
+model_data_4vi <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2, data = this_data_4, family = binomial())
+
+model_data_4vii <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short, data = this_data_4, family = binomial())
+
+model_data_4iii <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province , data = this_data_4, family = binomial())
+
+model_data_4ix <- glm(lt_search_1mo ~ log_eth_dens_prov + years + education + age + age_sq + sex + work_permit + sector2 + country_short + province + sector2:log_eth_dens_prov, data = this_data_4, family = binomial())
+
+```
+
+```{r echo = FALSE, warning = FALSE, message = FALSE, results='asis', resize.height=4,resize.width=11}
+stargazer(model_data_4i, model_data_4iv, model_data_4v, model_data_4vi, model_data_4vii, model_data_4viii,
+          type="latex",
+          title = "Effect of log of co-ethnic density on probability of finding a job in less than a month",
+          colnames = FALSE,
+          dep.var.labels = "Probability of finding a job in less than a month",
+          dep.var.labels.include = T,
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "years", "education", "work_permit", "age", "age_sq", "sex"),
+          omit = c("sector2", "country_short", "province"),
+          add.lines=list(c('Sector controls', rep("No", 3), rep("Yes", 3)),
+                         c('Regional controls', rep("No", 4), rep("Yes", 2)),
+                         c('Country of origin controls', rep("No", 5), rep("Yes", 1))),
+          column.sep.width = "1pt",
+          header=FALSE,
+          no.space = TRUE,
+          digits = 3,
+          df = FALSE,
+          single.row = T,
+          font.size = "tiny",
+          notes.align = "c",
+          keep.stat = c("n", "rsq", "f", "ser"),
+          table.placement = "H")
+
+stargazer(model_data_4ix,
+          type="latex",
+          title = "Effect of log of co-ethnic density on probability of finding a job in less than a month",
+          colnames = FALSE,
+          dep.var.labels = "Probability of finding a job in less than a month",
+          dep.var.labels.include = T,
+          #covariate.labels = c("Civic engagement indicator", "Co-ethnic concentration", "Co-ethnic concentration squared","Count of siblings in same province", "Years since arrival", "Education", "Spanish - suficiente", "Spanish - bien", "Spanish - nativo", "Work authorization?", "Age", "Age squared", "Sex - female", "Civic engagement:Sex - female"),
+          keep = c("log_eth_dens_prov", "sector2:log_eth_dens_prov"),
+          omit = c("years", "education", "work_permit", "age", "age_sq", "sex", "country_short", "province", "sector2"),
+          add.lines=list(c('Years in Spain control', rep("Yes", 1)),
+                         c('Education level control', rep("Yes", 1)),
+                         c('Work authorization control', rep("Yes", 1)),
+                         c('Age control', rep("Yes", 1)),
+                         c('Age squared control', rep("Yes", 1)),
+                         c('Gender controls', rep("Yes", 1)),
+                         c('Country of origin controls', rep("Yes", 1)),
+                         c('Regional controls', rep("Yes", 1)),
+                         c('Sector controls', rep("Yes", 1))),
+          column.sep.width = "1pt",
+          header=FALSE,
+          no.space = TRUE,
+          digits = 3,
+          df = FALSE,
+          single.row = T,
+          font.size = "tiny",
+          notes.align = "c",
+          keep.stat = c("n", "rsq", "f", "ser"),
+          table.placement = "H")
+```
 ## General comments
 
 ### Variable fixes
